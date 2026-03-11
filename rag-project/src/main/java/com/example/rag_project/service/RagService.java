@@ -1,6 +1,7 @@
 package com.example.rag_project.service;
 
 import org.springframework.ai.document.Document;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.reader.TextReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -26,6 +27,9 @@ public class RagService {
 
     @Autowired
     private ResourceLoader resourceLoader;
+
+    @Autowired
+    private ChatModel chatModel;
 
     @Value("${rag.documents.folder:documents}")
     private String documentsFolder;
@@ -159,14 +163,12 @@ public class RagService {
             initializeDocuments();
         }
 
-        // 1. 유사도 검색 (의미 기반 검색)
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
         
         if (relevantDocuments.isEmpty()) {
-            return "📭 관련 정보를 찾을 수 없습니다.\n💡 다른 질문을 시도해보세요.";
+            return "📭 관련 정보를 찾을 수 없습니다.";
         }
         
-        // 2. 검색된 내용을 하나로 합치기 (README.md 제외)
         String context = relevantDocuments.stream()
                 .filter(doc -> {
                     String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
@@ -176,11 +178,26 @@ public class RagService {
                 .collect(Collectors.joining("\n\n"));
         
         if (context.trim().isEmpty()) {
-            return "📭 관련 정보를 찾을 수 없습니다.\n💡 다른 질문을 시도해보세요.";
+            return "📭 관련 정보를 찾을 수 없습니다.";
         }
         
-        // 3. 자연스러운 답변 생성 (하이브리드 방식)
-        return generateNaturalResponse(query, context);
+        String prompt = String.format("""
+            당신은 제공된 문서를 바탕으로 답변하는 전문가입니다.
+            아래 [문서 내용]을 참고하여 사용자의 질문에 한국어로 친절하게 답변하세요.
+            문서에 없는 내용은 절대로 지어내지 마세요.
+            제공된 문서의 내용만 바탕으로 답변할 것.
+            
+            [문서 내용]
+            %s
+            
+            질문: %s
+            """, context, query);
+
+        try {
+            return chatModel.call(prompt);
+        } catch (Exception e) {
+            return "❌ AI 답변 생성 중 오류: " + e.getMessage();
+        }
     }
     
     /**

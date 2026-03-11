@@ -1,15 +1,13 @@
 spring:
   ai:
     ollama:
-      enabled: true
-      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      base-url: http://localhost:11434
       chat:
         model: llama3
         options:
           temperature: 0.7
-      # Ollama ChatModel 자동 설정 활성화
-      init:
-        enabled: true
+      embedding:
+        model: llama3
   application:
     name: rag-project
 
