@@ -1,0 +1,30 @@
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:your-openai-api-key}
+      chat:
+        options:
+          model: gpt-3.5-turbo
+          temperature: 0.7
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: llama3.1
+        options:
+          temperature: 0.7
+      # Ollama ChatModel 자동 설정 활성화
+      init:
+        enabled: true
+
+# RAG 문서 폴더 설정
+rag:
+  documents:
+    folder: ${RAG_DOCUMENTS_FOLDER:documents}
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.example.rag_project: DEBUG
+    org.springframework.ai: DEBUG
