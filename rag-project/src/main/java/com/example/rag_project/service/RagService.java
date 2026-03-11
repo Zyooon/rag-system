@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class RagService {
@@ -154,38 +155,155 @@ public class RagService {
      * @return RAG를 통해 생성된 답변
      */
     public String searchAndAnswer(String query) {
-        // 문서가 로드되지 않은 상태이면 자동으로 초기화 시도
         if (!isInitialized) {
-            System.out.println("🔄 문서가 로드되지 않았습니다. 자동으로 초기화합니다...");
             initializeDocuments();
         }
 
-        // 1. 벡터 저장소에서 질문과 관련된 문서 검색
+        // 1. 유사도 검색 (의미 기반 검색)
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
         
         if (relevantDocuments.isEmpty()) {
-            return "📭 관련 정보를 찾을 수 없습니다.\n" +
-                   "💡 문서 폴더에 더 많은 파일을 추가하거나 다른 질문을 시도해보세요.";
+            return "📭 관련 정보를 찾을 수 없습니다.\n💡 다른 질문을 시도해보세요.";
         }
         
-        // 2. 검색된 문서 내용을 컨텍스트로 구성
-        StringBuilder context = new StringBuilder();
-        context.append("다음은 검색된 관련 문서 내용입니다:\n\n");
+        // 2. 검색된 내용을 하나로 합치기 (README.md 제외)
+        String context = relevantDocuments.stream()
+                .filter(doc -> {
+                    String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
+                    return !filename.equals("README.md");
+                })
+                .map(Document::getText)
+                .collect(Collectors.joining("\n\n"));
         
-        for (int i = 0; i < relevantDocuments.size(); i++) {
-            Document doc = relevantDocuments.get(i);
-            String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
-            context.append("📄 문서 ").append(i + 1).append(" (").append(filename).append("):\n");
-            context.append(doc.getText()).append("\n\n");
+        if (context.trim().isEmpty()) {
+            return "📭 관련 정보를 찾을 수 없습니다.\n💡 다른 질문을 시도해보세요.";
         }
         
-        // 3. 컨텍스트와 질문을 결합한 프롬프트 생성
-        String prompt = createRagPrompt(context.toString(), query);
+        // 3. 자연스러운 답변 생성 (하이브리드 방식)
+        return generateNaturalResponse(query, context);
+    }
+    
+    /**
+     * 자연스러운 답변을 생성하는 메서드 (LLM 없이)
+     * @param query 사용자 질문
+     * @param context 검색된 문서 내용
+     * @return 자연스러운 답변
+     */
+    private String generateNaturalResponse(String query, String context) {
+        StringBuilder response = new StringBuilder();
         
-        // 4. 임시로 간단한 답변 생성 (Ollama 연동 전)
-        String response = generateSimpleResponse(prompt, relevantDocuments);
+        // 질문 유형 분석 및 답변 생성
+        String lowerQuery = query.toLowerCase();
         
-        return response;
+        if (lowerQuery.contains("뭐") || lowerQuery.contains("무엇") || lowerQuery.contains("알려줘")) {
+            // "뭐야?" 타입 질문
+            response.append(extractWhatAnswer(query, context));
+        } else if (lowerQuery.contains("어디") || lowerQuery.contains("서식")) {
+            // "어디야?" 타입 질문
+            response.append(extractWhereAnswer(query, context));
+        } else if (lowerQuery.contains("어떻게") || lowerQuery.contains("기능")) {
+            // "어떻게?" 타입 질문
+            response.append(extractHowAnswer(query, context));
+        } else {
+            // 일반 질문
+            response.append(extractGeneralAnswer(query, context));
+        }
+        
+        return response.toString();
+    }
+    
+    /**
+     * "뭐야?" 타입 질문에 대한 답변 추출
+     */
+    private String extractWhatAnswer(String query, String context) {
+        String[] lines = context.split("\n");
+        StringBuilder answer = new StringBuilder();
+        
+        for (String line : lines) {
+            line = line.trim();
+            if (line.matches("^\\d+\\..*")) {
+                // 항목 제목 추출
+                String title = line.replaceFirst("^\\d+\\.", "").trim();
+                answer.append("문서에 따르면 ").append(title).append("가 있습니다.\n\n");
+                
+                // 특징 정보 추출
+                for (int i = getLineIndex(lines, line) + 1; i < lines.length; i++) {
+                    String nextLine = lines[i].trim();
+                    if (nextLine.matches("^\\d+\\..*")) break;
+                    if (nextLine.startsWith("- 특징:") || nextLine.startsWith("- 기능:")) {
+                        answer.append(nextLine).append("\n");
+                    }
+                }
+                break;
+            }
+        }
+        
+        return answer.length() > 0 ? answer.toString() : "문서에서 관련 정보를 찾을 수 없습니다.";
+    }
+    
+    /**
+     * "어디야?" 타입 질문에 대한 답변 추출
+     */
+    private String extractWhereAnswer(String query, String context) {
+        String[] lines = context.split("\n");
+        StringBuilder answer = new StringBuilder();
+        
+        for (String line : lines) {
+            line = line.trim();
+            if (line.startsWith("- 서식지:") || line.startsWith("- 원산지:")) {
+                answer.append(line);
+                break;
+            }
+        }
+        
+        return answer.length() > 0 ? answer.toString() : "문서에서 관련 정보를 찾을 수 없습니다.";
+    }
+    
+    /**
+     * "어떻게?" 타입 질문에 대한 답변 추출
+     */
+    private String extractHowAnswer(String query, String context) {
+        String[] lines = context.split("\n");
+        StringBuilder answer = new StringBuilder();
+        
+        for (String line : lines) {
+            line = line.trim();
+            if (line.startsWith("- 기능:") || line.startsWith("- 효능:")) {
+                answer.append(line);
+                break;
+            }
+        }
+        
+        return answer.length() > 0 ? answer.toString() : "문서에서 관련 정보를 찾을 수 없습니다.";
+    }
+    
+    /**
+     * 일반 질문에 대한 답변 추출
+     */
+    private String extractGeneralAnswer(String query, String context) {
+        String[] lines = context.split("\n");
+        StringBuilder answer = new StringBuilder();
+        
+        for (String line : lines) {
+            line = line.trim();
+            if (line.startsWith("-")) {
+                answer.append(line).append("\n");
+            }
+        }
+        
+        return answer.length() > 0 ? answer.toString() : "문서에서 관련 정보를 찾을 수 없습니다.";
+    }
+    
+    /**
+     * 라인 인덱스 찾기
+     */
+    private int getLineIndex(String[] lines, String targetLine) {
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].trim().equals(targetLine)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

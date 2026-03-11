@@ -1,20 +1,17 @@
 spring:
   ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:your-openai-api-key}
-      chat:
-        options:
-          model: gpt-3.5-turbo
-          temperature: 0.7
     ollama:
+      enabled: true
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
-        model: llama3.1
+        model: llama3
         options:
           temperature: 0.7
       # Ollama ChatModel 자동 설정 활성화
       init:
         enabled: true
+  application:
+    name: rag-project
 
 # RAG 문서 폴더 설정
 rag:
