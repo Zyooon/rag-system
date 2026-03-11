@@ -5,7 +5,9 @@ spring:
       chat:
         model: llama3
         options:
-          temperature: 0.7
+          temperature: 0.1
+          top-p: 0.9
+          max-tokens: 1000
       embedding:
         model: llama3
   application:
@@ -21,5 +23,5 @@ server:
 
 logging:
   level:
-    com.example.rag_project: DEBUG
-    org.springframework.ai: DEBUG
+    '[com.example.rag_project]': DEBUG
+    '[org.springframework.ai]': DEBUG
