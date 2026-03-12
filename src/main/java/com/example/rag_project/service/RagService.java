@@ -37,51 +37,50 @@ public class RagService {
         private String currentH2 = "";  // 중제목 (Level 2)
         private String currentH3 = "";  // 소제목 (Level 3)
         
-        // 제목 패턴 정의 (구체적인 패턴부터 순서대로)
+        // 제목 패턴 정의 (마크다운 형식 우선)
         private static final Pattern[] HEADING_PATTERNS = {
-            Pattern.compile("^###\\s+(.+)$"),         // ### 소소제목 (가장 구체적)
-            Pattern.compile("^##\\s+(.+)$"),          // ## 소제목
+            // 마크다운 제목 형식 (우선순위 높음)
+            Pattern.compile("^###\\s+(.+)$"),         // ### 소소제목
+            Pattern.compile("^##\\s+(.+)$"),          // ## 소제목  
             Pattern.compile("^#\\s+(.+)$"),           // # 제목
+            
+            // 마크다운 목록 형식
+            Pattern.compile("^-\\s+\\*\\*(.+?)\\*\\*:\\s*(.+)$"), // Markdown 굵은 글씨 항목
+            Pattern.compile("^-\\s+(.+)$"),            // 일반 목록 항목
+            
+            // 기타 구조화된 형식
             Pattern.compile("^\\d+\\.\\d+\\.\\s+(.+)$"), // 1.1. 소제목
             Pattern.compile("^\\d+\\.\\s+(.+)$"),     // 1. 제목
             Pattern.compile("^\\[(.+)\\]$"),            // [제목] - 대괄호 제목
             Pattern.compile("^제목:\\s*(.+)$"),       // 제목: 내용
-            Pattern.compile("^\\|.+\\|$"),           // 표 형식 (테이블)
-            Pattern.compile("^-\\s+\\*\\*(.+?)\\*\\*:\\s*(.+)$"), // Markdown 굵은 글씨 항목
-            Pattern.compile("^-\\s+(.+)$")            // 일반 목록 항목
+            Pattern.compile("^\\|.+\\|$")            // 표 형식 (테이블)
         };
         
         public List<Document> parse(String content, Map<String, Object> baseMetadata) {
             List<Document> chunks = new ArrayList<>();
             String[] lines = content.split("\n");
             
-            // 문서 전체의 제목 추출
-            String documentTitle = extractDocumentTitle(content);
+            // 파일마다 상태 초기화 - 이전 파일의 제목 정보가 영향주지 않도록
+            this.currentH1 = extractDocumentTitle(content);
+            this.currentH2 = "";
+            this.currentH3 = "";
             
             for (String line : lines) {
                 String trimmedLine = line.trim();
+                if (trimmedLine.isEmpty()) continue;
+
+                // 제목 업데이트 여부 확인 (제목도 본문에 포함되도록 수정)
+                updateHeadingLevels(trimmedLine);
                 
-                // 제목 패턴 확인 및 업데이트
-                if (updateHeadingLevels(trimmedLine)) {
-                    continue; // 제목 라인은 본문으로 처리하지 않음
-                }
-                
-                // 빈 줄은 건너뛰기
-                if (trimmedLine.isEmpty()) {
-                    continue;
-                }
-                
-                // 본문 내용 처리
                 Map<String, Object> metadata = new HashMap<>(baseMetadata);
-                metadata.put("h1", currentH1.isEmpty() ? documentTitle : currentH1);
+                metadata.put("h1", currentH1);
                 metadata.put("h2", currentH2);
                 metadata.put("h3", currentH3);
                 
-                // 컨텍스트 정보를 포함한 텍스트 생성
-                String contextAwareText = createContextAwareText(line);
+                // 컨텍스트 정보를 포함하되, 제목 줄 자체도 벡터화 대상에 포함하여 검색 품질 향상
+                String contextAwareText = createContextAwareText(trimmedLine);
                 chunks.add(new Document(contextAwareText, metadata));
             }
-            
             return chunks;
         }
         
@@ -103,28 +102,35 @@ public class RagService {
                                 return true;
                                 
                             case 1: // ## 소제목
-                            case 3: // 1.1. 소제목
                                 currentH2 = title;
                                 currentH3 = "";
                                 return true;
                                 
                             case 2: // # 제목
-                            case 4: // 1. 제목
-                            case 5: // [제목]
-                            case 6: // 제목: 내용
                                 currentH1 = title;
                                 currentH2 = "";
                                 currentH3 = "";
                                 return true;
                                 
-                            case 7: // 표 형식 - 제목으로 간주하지 않고 내용으로 처리
-                                return false; // 표는 본문으로 처리
-                                
-                            case 8: // Markdown 굵은 글씨 항목 - 내용으로 처리
-                                return false; // 항목은 본문으로 처리
-                                
-                            case 9: // 일반 목록 항목 - 내용으로 처리
+                            case 3: // Markdown 굵은 글씨 항목 - 내용으로 처리
+                            case 4: // 일반 목록 항목 - 내용으로 처리
                                 return false; // 목록은 본문으로 처리
+                                
+                            case 5: // 1.1. 소제목
+                                currentH2 = title;
+                                currentH3 = "";
+                                return true;
+                                
+                            case 6: // 1. 제목
+                            case 7: // [제목]
+                            case 8: // 제목: 내용
+                                currentH1 = title;
+                                currentH2 = "";
+                                currentH3 = "";
+                                return true;
+                                
+                            case 9: // 표 형식 - 제목으로 간주하지 않고 내용으로 처리
+                                return false; // 표는 본문으로 처리
                         }
                     } catch (IndexOutOfBoundsException e) {
                         // 그룹이 없는 패턴은 건너뛰기
@@ -191,6 +197,90 @@ public class RagService {
             
             return "제목 없음";
         }
+    }
+
+    /**
+     * 일반 텍스트를 마크다운 형식으로 변환하는 메서드
+     * 구조화된 정보를 마크다운 형식으로 재구성하여 검색 품질 향상
+     */
+    private String convertToMarkdown(String content, String filename) {
+        StringBuilder markdown = new StringBuilder();
+        String[] lines = content.split("\n");
+        
+        // 파일명을 기본 제목으로 사용
+        String baseTitle = filename.replace(".txt", "").replace(".md", "");
+        markdown.append("# ").append(baseTitle).append("\n\n");
+        
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            
+            if (trimmedLine.isEmpty()) {
+                markdown.append("\n");
+                continue;
+            }
+            
+            // 제목 패턴 확인
+            boolean isHeading = false;
+            for (int i = 0; i < HierarchicalParser.HEADING_PATTERNS.length; i++) {
+                Pattern pattern = HierarchicalParser.HEADING_PATTERNS[i];
+                Matcher matcher = pattern.matcher(trimmedLine);
+                
+                if (matcher.matches() && matcher.groupCount() >= 1) {
+                    try {
+                        String title = matcher.group(1).trim();
+                        
+                        switch (i) {
+                            case 0: // ### 소소제목
+                                markdown.append("### ").append(title).append("\n\n");
+                                isHeading = true;
+                                break;
+                            case 1: // ## 소제목
+                                markdown.append("## ").append(title).append("\n\n");
+                                isHeading = true;
+                                break;
+                            case 2: // # 제목
+                                markdown.append("# ").append(title).append("\n\n");
+                                isHeading = true;
+                                break;
+                            case 3: // Markdown 굵은 글씨 항목
+                                markdown.append("- **").append(title).append("**\n\n");
+                                isHeading = true;
+                                break;
+                            case 4: // 일반 목록 항목
+                                markdown.append("- ").append(title).append("\n");
+                                isHeading = true;
+                                break;
+                            case 5: // 1.1. 소제목
+                                markdown.append("## ").append(title).append("\n\n");
+                                isHeading = true;
+                                break;
+                            case 6: // 1. 제목
+                            case 7: // [제목]
+                            case 8: // 제목: 내용
+                                markdown.append("# ").append(title).append("\n\n");
+                                isHeading = true;
+                                break;
+                            case 9: // 표 형식
+                                markdown.append("| ").append(trimmedLine.substring(1, trimmedLine.length()-1).replace(" | ", " | ")).append(" |\n");
+                                isHeading = true;
+                                break;
+                        }
+                    } catch (IndexOutOfBoundsException e) {
+                        // 그룹이 없는 패턴은 건너뛰기
+                        continue;
+                    }
+                    
+                    if (isHeading) break;
+                }
+            }
+            
+            // 제목이 아닌 일반 텍스트는 그대로 추가
+            if (!isHeading) {
+                markdown.append(trimmedLine).append("\n\n");
+            }
+        }
+        
+        return markdown.toString();
     }
 
     @Autowired
@@ -289,13 +379,19 @@ public class RagService {
                         String content = Files.readString(path);
                         System.out.println("파일 내용 길이: " + content.length() + "자");
                         
+                        // 모든 문서를 마크다운으로 변환
+                        String filename = path.getFileName().toString();
+                        String markdownContent = convertToMarkdown(content, filename);
+                        System.out.println("마크다운 변환 완료: " + filename);
+                        
                         Map<String, Object> baseMetadata = java.util.Map.of(
-                            "filename", path.getFileName().toString(), 
-                            "filepath", path.toString()
+                            "filename", filename, 
+                            "filepath", path.toString(),
+                            "format", "markdown" // 마크다운 형식임을 표시
                         );
                         
                         // HierarchicalParser를 사용하여 구조화된 문서 조각 생성
-                        List<Document> parsedDocuments = hierarchicalParser.parse(content, baseMetadata);
+                        List<Document> parsedDocuments = hierarchicalParser.parse(markdownContent, baseMetadata);
                         allDocuments.addAll(parsedDocuments);
                         
                         System.out.println("파일 로드 완료: " + path.getFileName() + 
