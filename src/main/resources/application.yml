@@ -12,6 +12,18 @@ spring:
         model: llama3
   application:
     name: rag-project
+  # Redis 설정 (향후 RedisVectorStore 사용 시)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 1234
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
 
 # RAG 문서 폴더 설정
 rag:
@@ -19,6 +31,8 @@ rag:
     folder: ${RAG_DOCUMENTS_FOLDER:documents}
   search:
     threshold: 0.5
+  vectorstore:
+    type: simple  # redis 또는 simple (현재는 simple만 지원)
 
 server:
   port: 8080

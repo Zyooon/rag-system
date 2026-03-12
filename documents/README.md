@@ -47,4 +47,42 @@ rag:
   - 0.7 ~ 0.9: 더 정확한 답변이 필요할 때
   - 0.3 ~ 0.5: 더 넓은 범위의 검색이 필요할 때
 
-임계값이 너무 높으면 관련 정보를 찾지 못할 수 있고, 너무 낮으면 부정확한 정보가 포함될 수 있습니다.
+## API 엔드포인트
+
+### 문서 저장
+- `POST /api/rag/save-to-redis` - documents 폴더의 모든 문서를 Redis에 저장
+
+### 기존 기능
+- `POST /api/rag/load` - 단일 텍스트 파일 로드
+- `POST /api/rag/load-folder` - 폴더의 모든 문서 로드
+- `POST /api/rag/initialize` - 기본 문서 폴더 자동 초기화
+- `POST /api/rag/query` - 질문하기
+- `GET /api/rag/status` - 시스템 상태 확인
+- `DELETE /api/rag/clear` - 벡터 저장소 초기화
+
+## Redis 저장 기능
+
+### 특징
+- **영속성**: 프로그램 재시작 후에도 문서 데이터 유지
+- **자동 분할**: 문서를 자동으로 작은 조각으로 분리하여 저장
+- **메타데이터**: 파일명, 경로, 저장 시간 등의 정보 포함
+- **유사도 검색**: 벡터 기반 의미 검색 지원
+
+### 사용 방법
+```bash
+# documents 폴더의 모든 문서를 Redis에 저장
+curl -X POST http://localhost:8080/api/rag/save-to-redis
+```
+
+### 응답 예시
+```json
+{
+  "success": true,
+  "message": "총 45개의 문서 조각이 Redis에 저장되었습니다."
+}
+```
+
+### 주의사항
+- Redis 서버가 실행 중이어야 합니다 (localhost:6379)
+- 현재는 SimpleVectorStore를 사용하며, 향후 RedisVectorStore로 업그레이드 예정
+- 저장된 데이터는 프로그램 재시작 후에도 유지됩니다.

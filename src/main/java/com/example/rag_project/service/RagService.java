@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -16,7 +17,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Collections;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +35,9 @@ public class RagService {
 
     @Autowired
     private ChatModel chatModel;
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
     @Value("${rag.documents.folder:documents}")
     private String documentsFolder;
@@ -145,9 +153,9 @@ public class RagService {
      */
     public void initializeDocuments() {
         try {
-            // rag-project 폴더 기준의 문서들만 로드
+            // 프로젝트 루트 기준의 문서들만 로드
             String currentDir = System.getProperty("user.dir");
-            String projectDocumentsPath = Paths.get(currentDir, "rag-project", "documents").toString();
+            String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
             loadDocumentsFromFolder(projectDocumentsPath);
             
         } catch (IOException e) {
@@ -251,5 +259,208 @@ public class RagService {
      */
     public boolean isInitialized() {
         return isInitialized;
+    }
+
+    /**
+     * 현재 documents 폴더의 모든 문서를 Redis에 저장하는 메서드
+     * @return 저장된 문서 수
+     * @throws IOException 파일 읽기 실패 시 발생
+     */
+    public int saveDocumentsToRedis() throws IOException {
+        String currentDir = System.getProperty("user.dir");
+        String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
+        
+        return saveDocumentsFromFolderToRedis(projectDocumentsPath);
+    }
+
+    /**
+     * Redis에 저장된 모든 문서 키를 조회하는 메서드
+     * @return 저장된 문서 키 목록
+     */
+    public java.util.List<String> getAllRedisDocumentKeys() {
+        try {
+            java.util.Set<String> keys = redisTemplate.keys("rag:document:*");
+            java.util.List<String> keyList = new java.util.ArrayList<>(keys);
+            java.util.Collections.sort(keyList);
+            
+            System.out.println("🔍 Redis에 저장된 문서 키: " + keyList.size() + "개");
+            for (String key : keyList) {
+                System.out.println("  - " + key);
+            }
+            
+            return keyList;
+        } catch (Exception e) {
+            System.err.println("❌ Redis 키 조회 실패: " + e.getMessage());
+            return new java.util.ArrayList<>();
+        }
+    }
+
+    /**
+     * 특정 Redis 문서의 내용을 조회하는 메서드
+     * @param key 문서 키
+     * @return 문서 내용
+     */
+    public java.util.Map<String, Object> getRedisDocument(String key) {
+        try {
+            java.util.Map<Object, Object> data = redisTemplate.opsForHash().entries(key);
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            
+            for (java.util.Map.Entry<Object, Object> entry : data.entrySet()) {
+                result.put(entry.getKey().toString(), entry.getValue());
+            }
+            
+            System.out.println("📄 문서 내용 (" + key + "):");
+            System.out.println("  - ID: " + result.get("id"));
+            System.out.println("  - 저장 시간: " + result.get("saved_at"));
+            System.out.println("  - 내용 길이: " + (result.containsKey("content") ? result.get("content").toString().length() : 0) + "자");
+            System.out.println("  - 메타데이터: " + result.get("metadata"));
+            
+            return result;
+        } catch (Exception e) {
+            System.err.println("❌ Redis 문서 조회 실패 (" + key + "): " + e.getMessage());
+            return new java.util.HashMap<>();
+        }
+    }
+
+    /**
+     * Redis에 저장된 모든 문서 내용을 조회하는 메서드
+     * @return 모든 문서 내용
+     */
+    public java.util.List<java.util.Map<String, Object>> getAllRedisDocuments() {
+        java.util.List<String> keys = getAllRedisDocumentKeys();
+        java.util.List<java.util.Map<String, Object>> documents = new java.util.ArrayList<>();
+        
+        for (String key : keys) {
+            java.util.Map<String, Object> doc = getRedisDocument(key);
+            if (!doc.isEmpty()) {
+                documents.add(doc);
+            }
+        }
+        
+        System.out.println("📚 총 " + documents.size() + "개의 문서를 Redis에서 조회했습니다.");
+        return documents;
+    }
+
+    /**
+     * Redis에 저장된 모든 문서를 삭제하는 메서드
+     * @return 삭제된 문서 수
+     */
+    public int clearAllRedisDocuments() {
+        try {
+            java.util.Set<String> keys = redisTemplate.keys("rag:document:*");
+            if (keys.isEmpty()) {
+                System.out.println("📂 Redis에 저장된 문서가 없습니다.");
+                return 0;
+            }
+            
+            redisTemplate.delete(keys);
+            System.out.println("🗑️ Redis에서 " + keys.size() + "개의 문서를 삭제했습니다.");
+            return keys.size();
+        } catch (Exception e) {
+            System.err.println("❌ Redis 문서 삭제 실패: " + e.getMessage());
+            return 0;
+        }
+    }
+    public boolean testRedisConnection() {
+        try {
+            redisTemplate.opsForValue().set("test:connection", "Redis 연결 테스트 성공!");
+            String result = (String) redisTemplate.opsForValue().get("test:connection");
+            redisTemplate.delete("test:connection");
+            
+            System.out.println("✅ Redis 연결 테스트 성공: " + result);
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Redis 연결 테스트 실패: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 특정 폴더의 문서들을 Redis에 저장하는 메서드
+     * @param folderPath 문서 폴더 경로
+     * @return 저장된 문서 수
+     * @throws IOException 파일 읽기 실패 시 발생
+     */
+    private int saveDocumentsFromFolderToRedis(String folderPath) throws IOException {
+        // 상대 경로를 절대 경로로 변환
+        Path folder;
+        if (Paths.get(folderPath).isAbsolute()) {
+            folder = Paths.get(folderPath);
+        } else {
+            String currentDir = System.getProperty("user.dir");
+            folder = Paths.get(currentDir, folderPath);
+        }
+        
+        System.out.println("📂 Redis 저장을 위한 문서 폴더 경로: " + folder.toAbsolutePath());
+        
+        if (!Files.exists(folder) || !Files.isDirectory(folder)) {
+            System.out.println("📂 폴더가 존재하지 않습니다: " + folder.toAbsolutePath());
+            return 0;
+        }
+
+        List<Document> allDocuments = new ArrayList<>();
+        TokenTextSplitter textSplitter = new TokenTextSplitter();
+
+        try {
+            // 폴더 내의 모든 .txt와 .md 파일 처리
+            Files.list(folder)
+                .filter(path -> {
+                    String fileName = path.getFileName().toString().toLowerCase();
+                    return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                })
+                .forEach(path -> {
+                    try {
+                        String content = Files.readString(path);
+                        Document document = new Document(content, 
+                            java.util.Map.of("filename", path.getFileName().toString(), 
+                                           "filepath", path.toString(),
+                                           "saved_at", java.time.LocalDateTime.now().toString()));
+                        allDocuments.add(document);
+                        
+                        System.out.println("✅ Redis 저장용 파일 로드 완료: " + path.getFileName());
+                    } catch (IOException e) {
+                        System.err.println("❌ 파일 로드 실패: " + path + " - " + e.getMessage());
+                    }
+                });
+        } catch (IOException e) {
+            System.err.println("❌ 폴더 스캔 실패: " + e.getMessage());
+            throw e;
+        }
+
+        if (!allDocuments.isEmpty()) {
+            // 문서를 작은 조각으로 분할
+            List<Document> splitDocuments = textSplitter.apply(allDocuments);
+            
+            // Redis에 직접 문서 저장
+            int savedCount = 0;
+            for (int i = 0; i < splitDocuments.size(); i++) {
+                Document doc = splitDocuments.get(i);
+                String key = "rag:document:" + i;
+                
+                // 문서 정보를 Map으로 변환하여 Redis에 저장
+                java.util.Map<String, Object> documentData = new java.util.HashMap<>();
+                documentData.put("content", doc.getText());
+                documentData.put("metadata", doc.getMetadata());
+                documentData.put("id", i);
+                documentData.put("saved_at", java.time.LocalDateTime.now().toString());
+                
+                try {
+                    redisTemplate.opsForHash().putAll(key, documentData);
+                    savedCount++;
+                } catch (Exception e) {
+                    System.err.println("❌ Redis 저장 실패 (문서 " + i + "): " + e.getMessage());
+                }
+            }
+            
+            // 벡터 저장소에도 추가 (검색용)
+            vectorStore.add(splitDocuments);
+            
+            isInitialized = true;
+            System.out.println("📚 총 " + allDocuments.size() + "개 파일(" + savedCount + "개 조각)이 Redis에 저장되었습니다.");
+            return savedCount;
+        } else {
+            System.out.println("📂 폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
+            return 0;
+        }
     }
 }

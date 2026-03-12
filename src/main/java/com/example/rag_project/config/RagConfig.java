@@ -9,11 +9,17 @@ import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 
 @Configuration
 public class RagConfig {
+
+    @Value("${rag.vectorstore.type:simple}")
+    private String vectorStoreType;
 
     // 1. Ollama API 설정 (로컬 서버 주소)
     @Bean
@@ -37,10 +43,27 @@ public class RagConfig {
                 .build();
     }
 
-    // 3. 임베딩 모델을 주입받아 벡터 저장소 생성
+    // 3. 벡터 저장소 설정 (현재는 Simple만 지원)
     @Bean
     public VectorStore vectorStore(EmbeddingModel embeddingModel) {
+        System.out.println(" Simple 벡터 저장소를 사용합니다.");
         return SimpleVectorStore.builder(embeddingModel).build();
+    }
+
+    // 5. RedisTemplate 설정 (문서 저장용)
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        
+        // 직렬화 설정 - 한글 깨짐 방지
+        template.setKeySerializer(new org.springframework.data.redis.serializer.StringRedisSerializer());
+        template.setValueSerializer(new org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer());
+        template.setHashKeySerializer(new org.springframework.data.redis.serializer.StringRedisSerializer());
+        template.setHashValueSerializer(new org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer());
+        
+        template.afterPropertiesSet();
+        return template;
     }
 
     // 4. Ollama 채팅 모델 (LLM) 설정 추가
