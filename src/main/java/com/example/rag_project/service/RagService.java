@@ -36,6 +36,9 @@ public class RagService {
 
     private boolean isInitialized = false;
 
+    @Value("${rag.search.threshold:0.7}") // 설정이 없으면 0.7을 기본으로 사용
+    private double similarityThreshold;
+
     /**
      * 텍스트 파일을 읽어서 벡터 저장소에 로드하는 메서드
      * @param filePath 클래스패스 기반의 파일 경로
@@ -157,6 +160,14 @@ public class RagService {
      * 사용자 질문에 대해 RAG를 통해 답변을 생성하는 메서드
      * @param query 사용자의 질문
      * @return RAG를 통해 생성된 답변
+     * 
+     * 처리 과정:
+     * 1. 벡터 저장소에서 질문과 유사한 문서들을 검색
+     * 2. 설정된 유사도 임계값(threshold)에 따라 문서 필터링
+     * 3. 필터링된 문서들을 기반으로 LLM을 통해 자연스러운 한국어 답변 생성
+     * 
+     * 유사도 임계값은 application.yml에서 설정 가능:
+     * rag.search.threshold (기본값: 0.7)
      */
     public String searchAndAnswer(String query) {
         if (!isInitialized) {
@@ -167,6 +178,17 @@ public class RagService {
         
         if (relevantDocuments.isEmpty()) {
             return "📭 관련 정보를 찾을 수 없습니다.";
+        }
+
+        List<Document> filteredDocuments = relevantDocuments.stream()
+            .filter(doc -> {
+                Double score = doc.getScore(); 
+                return score != null && score >= similarityThreshold;
+            })
+            .collect(Collectors.toList());
+
+        if (filteredDocuments.isEmpty()) {
+            return "질문과 관련된 충분히 신뢰할 수 있는 정보를 찾을 수 없습니다.";
         }
         
         String context = relevantDocuments.stream()
