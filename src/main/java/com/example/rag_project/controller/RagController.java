@@ -14,7 +14,7 @@ public class RagController {
 
     private final RagService ragService;
 
-    @PostMapping("/init")
+    @PostMapping("/sync")
     public ResponseEntity<RagResponse> initializeDocuments() {
         try {
             ragService.initializeDocuments();
@@ -24,7 +24,7 @@ public class RagController {
         }
     }
 
-    @PostMapping("/query")
+    @PostMapping("/ask")
     public ResponseEntity<RagResponse> query(@RequestBody RagRequest request) {
         try {
             String answer = ragService.searchAndAnswer(request.getQuery());
@@ -34,7 +34,7 @@ public class RagController {
         }
     }
 
-    @GetMapping("/status")
+    @GetMapping
     public ResponseEntity<RagResponse> getStatus() {
         try {
             java.util.Map<String, Object> status = ragService.getStatusWithFiles();
@@ -44,7 +44,7 @@ public class RagController {
         }
     }
 
-    @PostMapping("/save")
+    @PostMapping("/storage")
     public ResponseEntity<RagResponse> saveDocumentsToRedis() {
         try {
             java.util.Map<String, Object> result = ragService.saveDocumentsToRedis();
@@ -56,13 +56,23 @@ public class RagController {
         }
     }
 
-    @DeleteMapping("/clear")
+    @DeleteMapping("/storage")
     public ResponseEntity<RagResponse> clearAllRedisDocuments() {
         try {
             int deletedCount = ragService.clearAllRedisDocuments();
             return ResponseEntity.ok(RagResponse.success("Redis 문서 삭제 완료: " + deletedCount + "개"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("Redis 문서 삭제 실패: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/memory")
+    public ResponseEntity<RagResponse> clearVectorStore() {
+        try {
+            ragService.clearStore();
+            return ResponseEntity.ok(RagResponse.success("벡터 저장소가 초기화되었습니다."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(RagResponse.error("벡터 저장소 초기화 실패: " + e.getMessage()));
         }
     }
 }

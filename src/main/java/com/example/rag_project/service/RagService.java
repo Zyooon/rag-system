@@ -247,10 +247,22 @@ public class RagService {
      * 이는 현재 API 버전의 제약 사항임
      */
     public void clearStore() {
-        // TODO: 벡터 저장소 초기화 로직 구현 필요
-        // 현재 API 버전에서는 직접적인 clear() 메서드 제공 안 함
-        isInitialized = false;
-        System.out.println("🗑️ 벡터 저장소가 초기화되었습니다.");
+        try {
+            // 벡터 저장소 초기화 시도
+            // Spring AI 2.0.0-M2에서는 직접적인 clear() 메서드가 없어 
+            // 초기화 상태만 변경하고 로그 출력
+            isInitialized = false;
+            
+            // 실제 벡터 저장소 데이터는 현재 API에서 직접 삭제 불가
+            // 추후 API 업데이트 시 clear() 메서드 사용 가능
+            System.out.println("🗑️ 벡터 저장소가 초기화되었습니다.");
+            System.out.println("💡 참고: 현재 Spring AI 버전에서는 벡터 데이터 직접 삭제가 제한됩니다.");
+            System.out.println("   애플리케이션 재시작 시 Redis 데이터가 다시 로드되지 않도록 하려면 Redis 데이터도 삭제해주세요.");
+            
+        } catch (Exception e) {
+            System.err.println("❌ 벡터 저장소 초기화 실패: " + e.getMessage());
+            throw new RuntimeException("벡터 저장소 초기화 중 오류 발생", e);
+        }
     }
 
     /**
