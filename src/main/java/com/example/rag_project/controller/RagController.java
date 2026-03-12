@@ -14,7 +14,7 @@ public class RagController {
 
     private final RagService ragService;
 
-    @PostMapping("/initialize")
+    @PostMapping("/init")
     public ResponseEntity<RagResponse> initializeDocuments() {
         try {
             ragService.initializeDocuments();
@@ -56,7 +56,7 @@ public class RagController {
         }
     }
 
-    @DeleteMapping("/redis/clear")
+    @DeleteMapping("/clear")
     public ResponseEntity<RagResponse> clearAllRedisDocuments() {
         try {
             int deletedCount = ragService.clearAllRedisDocuments();
