@@ -85,10 +85,10 @@ public class RagService {
             folder = Paths.get(currentDir, folderPath);
         }
         
-        System.out.println("📂 문서 폴더 경로: " + folder.toAbsolutePath());
+        System.out.println("문서 폴더 경로: " + folder.toAbsolutePath());
         
         if (!Files.exists(folder) || !Files.isDirectory(folder)) {
-            System.out.println("📂 폴더가 존재하지 않습니다. 기본 경로로 시도합니다...");
+            System.out.println("폴더가 존재하지 않습니다. 기본 경로로 시도합니다...");
             
             // 기본 폴더 시도
             String currentDir = System.getProperty("user.dir");
@@ -97,12 +97,12 @@ public class RagService {
             if (!Files.exists(folder)) {
                 // 폴더 생성 시도
                 Files.createDirectories(folder);
-                System.out.println("📁 문서 폴더를 생성했습니다: " + folder.toAbsolutePath());
+                System.out.println("문서 폴더를 생성했습니다: " + folder.toAbsolutePath());
             } else {
-                System.out.println("📂 기본 폴더를 찾았습니다: " + folder.toAbsolutePath());
+                System.out.println("기본 폴더를 찾았습니다: " + folder.toAbsolutePath());
             }
         } else {
-            System.out.println("📂 폴더를 찾았습니다: " + folder.toAbsolutePath());
+            System.out.println("폴더를 찾았습니다: " + folder.toAbsolutePath());
         }
 
         List<Document> allDocuments = new ArrayList<>();
@@ -123,13 +123,13 @@ public class RagService {
                                            "filepath", path.toString()));
                         allDocuments.add(document);
                         
-                        System.out.println("✅ 파일 로드 완료: " + path.getFileName());
+                        System.out.println("파일 로드 완료: " + path.getFileName());
                     } catch (IOException e) {
-                        System.err.println("❌ 파일 로드 실패: " + path + " - " + e.getMessage());
+                        System.err.println("파일 로드 실패: " + path + " - " + e.getMessage());
                     }
                 });
         } catch (IOException e) {
-            System.err.println("❌ 폴더 스캔 실패: " + e.getMessage());
+            System.err.println("폴더 스캔 실패: " + e.getMessage());
             throw e;
         }
 
@@ -141,10 +141,10 @@ public class RagService {
             vectorStore.add(splitDocuments);
             
             isInitialized = true;
-            System.out.println("📚 총 " + allDocuments.size() + "개 파일이 벡터 저장소에 로드되었습니다.");
+            System.out.println("총 " + allDocuments.size() + "개 파일이 벡터 저장소에 로드되었습니다.");
         } else {
-            System.out.println("📂 폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
-            System.out.println("💡 이 폴더에 .txt 파일을 추가해주세요.");
+            System.out.println("폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
+            System.out.println("이 폴더에 .txt 파일을 추가해주세요.");
         }
     }
 
@@ -159,8 +159,8 @@ public class RagService {
             loadDocumentsFromFolder(projectDocumentsPath);
             
         } catch (IOException e) {
-            System.err.println("❌ 문서 초기화 실패: " + e.getMessage());
-            System.err.println("💡 documents 폴더 경로를 확인해주세요.");
+            System.err.println("문서 초기화 실패: " + e.getMessage());
+            System.err.println("documents 폴더 경로를 확인해주세요.");
         }
     }
 
@@ -185,7 +185,7 @@ public class RagService {
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
         
         if (relevantDocuments.isEmpty()) {
-            return "📭 관련 정보를 찾을 수 없습니다.";
+            return "관련 정보를 찾을 수 없습니다.";
         }
 
         List<Document> filteredDocuments = relevantDocuments.stream()
@@ -208,7 +208,7 @@ public class RagService {
                 .collect(Collectors.joining("\n\n"));
         
         if (context.trim().isEmpty()) {
-            return "📭 관련 정보를 찾을 수 없습니다.";
+            return "관련 정보를 찾을 수 없습니다.";
         }
         
         String prompt = String.format("""
@@ -236,7 +236,7 @@ public class RagService {
         try {
             return chatModel.call(prompt);
         } catch (Exception e) {
-            return "❌ AI 답변 생성 중 오류: " + e.getMessage();
+            return "AI 답변 생성 중 오류: " + e.getMessage();
         }
     }
 
@@ -255,12 +255,12 @@ public class RagService {
             
             // 실제 벡터 저장소 데이터는 현재 API에서 직접 삭제 불가
             // 추후 API 업데이트 시 clear() 메서드 사용 가능
-            System.out.println("🗑️ 벡터 저장소가 초기화되었습니다.");
-            System.out.println("💡 참고: 현재 Spring AI 버전에서는 벡터 데이터 직접 삭제가 제한됩니다.");
-            System.out.println("   애플리케이션 재시작 시 Redis 데이터가 다시 로드되지 않도록 하려면 Redis 데이터도 삭제해주세요.");
+            System.out.println("벡터 저장소가 초기화되었습니다.");
+            System.out.println("참고: 현재 Spring AI 버전에서는 벡터 데이터 직접 삭제가 제한됩니다.");
+            System.out.println("애플리케이션 재시작 시 Redis 데이터가 다시 로드되지 않도록 하려면 Redis 데이터도 삭제해주세요.");
             
         } catch (Exception e) {
-            System.err.println("❌ 벡터 저장소 초기화 실패: " + e.getMessage());
+            System.err.println("벡터 저장소 초기화 실패: " + e.getMessage());
             throw new RuntimeException("벡터 저장소 초기화 중 오류 발생", e);
         }
     }
@@ -339,14 +339,14 @@ public class RagService {
             java.util.List<String> keyList = new java.util.ArrayList<>(keys);
             java.util.Collections.sort(keyList);
             
-            System.out.println("🔍 Redis에 저장된 문서 키: " + keyList.size() + "개");
+            System.out.println("Redis에 저장된 문서 키: " + keyList.size() + "개");
             for (String key : keyList) {
                 System.out.println("  - " + key);
             }
             
             return keyList;
         } catch (Exception e) {
-            System.err.println("❌ Redis 키 조회 실패: " + e.getMessage());
+            System.err.println("Redis 키 조회 실패: " + e.getMessage());
             return new java.util.ArrayList<>();
         }
     }
@@ -365,7 +365,7 @@ public class RagService {
                 result.put(entry.getKey().toString(), entry.getValue());
             }
             
-            System.out.println("📄 문서 내용 (" + key + "):");
+            System.out.println("문서 내용 (" + key + "):");
             System.out.println("  - ID: " + result.get("id"));
             System.out.println("  - 저장 시간: " + result.get("saved_at"));
             System.out.println("  - 내용 길이: " + (result.containsKey("content") ? result.get("content").toString().length() : 0) + "자");
@@ -373,7 +373,7 @@ public class RagService {
             
             return result;
         } catch (Exception e) {
-            System.err.println("❌ Redis 문서 조회 실패 (" + key + "): " + e.getMessage());
+            System.err.println("Redis 문서 조회 실패 (" + key + "): " + e.getMessage());
             return new java.util.HashMap<>();
         }
     }
@@ -405,15 +405,15 @@ public class RagService {
         try {
             java.util.Set<String> keys = redisTemplate.keys("rag:document:*");
             if (keys.isEmpty()) {
-                System.out.println("📂 Redis에 저장된 문서가 없습니다.");
+                System.out.println("Redis에 저장된 문서가 없습니다.");
                 return 0;
             }
             
             redisTemplate.delete(keys);
-            System.out.println("🗑️ Redis에서 " + keys.size() + "개의 문서를 삭제했습니다.");
+            System.out.println("Redis에서 " + keys.size() + "개의 문서를 삭제했습니다.");
             return keys.size();
         } catch (Exception e) {
-            System.err.println("❌ Redis 문서 삭제 실패: " + e.getMessage());
+            System.err.println("Redis 문서 삭제 실패: " + e.getMessage());
             return 0;
         }
     }
@@ -423,10 +423,10 @@ public class RagService {
             String result = (String) redisTemplate.opsForValue().get("test:connection");
             redisTemplate.delete("test:connection");
             
-            System.out.println("✅ Redis 연결 테스트 성공: " + result);
+            System.out.println("Redis 연결 테스트 성공: " + result);
             return true;
         } catch (Exception e) {
-            System.err.println("❌ Redis 연결 테스트 실패: " + e.getMessage());
+            System.err.println("Redis 연결 테스트 실패: " + e.getMessage());
             return false;
         }
     }
@@ -439,7 +439,7 @@ public class RagService {
             List<Map<String, Object>> redisDocuments = getAllRedisDocuments();
             
             if (redisDocuments.isEmpty()) {
-                System.out.println("📂 Redis에 저장된 문서가 없습니다.");
+                System.out.println("Redis에 저장된 문서가 없습니다.");
                 return;
             }
             
@@ -465,11 +465,11 @@ public class RagService {
                 vectorStore.add(splitDocuments);
                 
                 isInitialized = true;
-                System.out.println("📚 Redis에서 " + documents.size() + "개 문서를 벡터 저장소에 로드했습니다.");
+                System.out.println("Redis에서 " + documents.size() + "개 문서를 벡터 저장소에 로드했습니다.");
             }
             
         } catch (Exception e) {
-            System.err.println("❌ Redis 문서 로드 실패: " + e.getMessage());
+            System.err.println("Redis 문서 로드 실패: " + e.getMessage());
             throw new RuntimeException("Redis 문서 로드 중 오류 발생", e);
         }
     }
@@ -490,10 +490,10 @@ public class RagService {
             folder = Paths.get(currentDir, folderPath);
         }
         
-        System.out.println("📂 Redis 저장을 위한 문서 폴더 경로: " + folder.toAbsolutePath());
+        System.out.println("Redis 저장을 위한 문서 폴더 경로: " + folder.toAbsolutePath());
         
         if (!Files.exists(folder) || !Files.isDirectory(folder)) {
-            System.out.println("📂 폴더가 존재하지 않습니다: " + folder.toAbsolutePath());
+            System.out.println("폴더가 존재하지 않습니다: " + folder.toAbsolutePath());
             return java.util.Map.of(
                 "savedCount", 0,
                 "duplicateCount", 0,
@@ -521,13 +521,13 @@ public class RagService {
                                            "saved_at", java.time.LocalDateTime.now().toString()));
                         allDocuments.add(document);
                         
-                        System.out.println("✅ Redis 저장용 파일 로드 완료: " + path.getFileName());
+                        System.out.println("Redis 저장용 파일 로드 완료: " + path.getFileName());
                     } catch (IOException e) {
-                        System.err.println("❌ 파일 로드 실패: " + path + " - " + e.getMessage());
+                        System.err.println("파일 로드 실패: " + path + " - " + e.getMessage());
                     }
                 });
         } catch (IOException e) {
-            System.err.println("❌ 폴더 스캔 실패: " + e.getMessage());
+            System.err.println("폴더 스캔 실패: " + e.getMessage());
             throw e;
         }
 
@@ -549,7 +549,7 @@ public class RagService {
                 // 중복 체크
                 if (existingKeys.contains(key)) {
                     duplicateCount++;
-                    System.out.println("🔄 중복 문서 건너뛰기: " + key);
+                    System.out.println("중복 문서 건너뛰기: " + key);
                     continue;
                 }
                 
@@ -563,9 +563,9 @@ public class RagService {
                 try {
                     redisTemplate.opsForHash().putAll(key, documentData);
                     savedCount++;
-                    System.out.println("💾 Redis 저장 완료: " + key);
+                    System.out.println("Redis 저장 완료: " + key);
                 } catch (Exception e) {
-                    System.err.println("❌ Redis 저장 실패 (문서 " + i + "): " + e.getMessage());
+                    System.err.println("Redis 저장 실패 (문서 " + i + "): " + e.getMessage());
                 }
             }
             
@@ -575,7 +575,7 @@ public class RagService {
                 isInitialized = true;
             }
             
-            String message = String.format("📚 총 %d개 파일 처리 완료: %d개 저장, %d개 중복", 
+            String message = String.format("총 %d개 파일 처리 완료: %d개 저장, %d개 중복", 
                                            allDocuments.size(), savedCount, duplicateCount);
             System.out.println(message);
             
@@ -587,7 +587,7 @@ public class RagService {
                 "message", message
             );
         } else {
-            System.out.println("📂 폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
+            System.out.println("폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
             return java.util.Map.of(
                 "savedCount", 0,
                 "duplicateCount", 0,
