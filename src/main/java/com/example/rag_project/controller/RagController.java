@@ -37,9 +37,8 @@ public class RagController {
     @GetMapping("/status")
     public ResponseEntity<RagResponse> getStatus() {
         try {
-            boolean isInitialized = ragService.isInitialized();
-            String message = isInitialized ? "문서가 로드되어 있습니다." : "문서가 로드되지 않았습니다.";
-            return ResponseEntity.ok(RagResponse.success(message));
+            java.util.Map<String, Object> status = ragService.getStatusWithFiles();
+            return ResponseEntity.ok(RagResponse.success(status.get("message").toString(), status));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("상태 확인 실패: " + e.getMessage()));
         }

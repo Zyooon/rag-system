@@ -254,6 +254,50 @@ public class RagService {
     }
 
     /**
+     * 현재 초기화 상태와 로드된 파일 목록을 반환하는 메서드
+     * @return 초기화 상태 정보
+     */
+    public java.util.Map<String, Object> getStatusWithFiles() {
+        java.util.Map<String, Object> status = new java.util.HashMap<>();
+        status.put("isInitialized", isInitialized());
+        
+        if (isInitialized()) {
+            // Redis에 저장된 문서 키 목록 조회
+            java.util.List<String> redisKeys = getAllRedisDocumentKeys();
+            
+            // 파일 목록 추출 (메타데이터에서 filename 추출)
+            java.util.Set<String> loadedFiles = new java.util.HashSet<>();
+            for (String key : redisKeys) {
+                try {
+                    java.util.Map<String, Object> doc = getRedisDocument(key);
+                    if (doc.containsKey("metadata")) {
+                        Object metadata = doc.get("metadata");
+                        if (metadata instanceof java.util.Map) {
+                            java.util.Map<?, ?> metaMap = (java.util.Map<?, ?>) metadata;
+                            Object filename = metaMap.get("filename");
+                            if (filename != null) {
+                                loadedFiles.add(filename.toString());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // 무시하고 계속 진행
+                }
+            }
+            
+            status.put("loadedFiles", new java.util.ArrayList<>(loadedFiles));
+            status.put("documentCount", redisKeys.size());
+            status.put("message", "문서가 로드되어 있습니다.");
+        } else {
+            status.put("loadedFiles", new java.util.ArrayList<>());
+            status.put("documentCount", 0);
+            status.put("message", "문서가 로드되지 않았습니다.");
+        }
+        
+        return status;
+    }
+
+    /**
      * 현재 초기화 상태를 반환하는 메서드
      * @return 초기화 여부
      */
