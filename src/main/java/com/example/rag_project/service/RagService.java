@@ -306,15 +306,15 @@ public class RagService {
     }
 
     /**
-     * 현재 documents 폴더의 모든 문서를 Redis에 저장하는 메서드
-     * @return 저장된 문서 수
+     * 현재 documents 폴더의 모든 문서를 Redis에 저장하는 메서드 (중복 방지)
+     * @return 저장 결과 정보
      * @throws IOException 파일 읽기 실패 시 발생
      */
-    public int saveDocumentsToRedis() throws IOException {
+    public java.util.Map<String, Object> saveDocumentsToRedis() throws IOException {
         String currentDir = System.getProperty("user.dir");
         String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
         
-        return saveDocumentsFromFolderToRedis(projectDocumentsPath);
+        return saveDocumentsFromFolderToRedisWithDuplicateCheck(projectDocumentsPath);
     }
 
     /**
@@ -420,12 +420,12 @@ public class RagService {
     }
 
     /**
-     * 특정 폴더의 문서들을 Redis에 저장하는 메서드
+     * 특정 폴더의 문서들을 Redis에 저장하는 메서드 (중복 방지)
      * @param folderPath 문서 폴더 경로
-     * @return 저장된 문서 수
+     * @return 저장 결과 정보
      * @throws IOException 파일 읽기 실패 시 발생
      */
-    private int saveDocumentsFromFolderToRedis(String folderPath) throws IOException {
+    public java.util.Map<String, Object> saveDocumentsFromFolderToRedisWithDuplicateCheck(String folderPath) throws IOException {
         // 상대 경로를 절대 경로로 변환
         Path folder;
         if (Paths.get(folderPath).isAbsolute()) {
@@ -439,7 +439,12 @@ public class RagService {
         
         if (!Files.exists(folder) || !Files.isDirectory(folder)) {
             System.out.println("📂 폴더가 존재하지 않습니다: " + folder.toAbsolutePath());
-            return 0;
+            return java.util.Map.of(
+                "savedCount", 0,
+                "duplicateCount", 0,
+                "totalCount", 0,
+                "message", "폴더가 존재하지 않습니다."
+            );
         }
 
         List<Document> allDocuments = new ArrayList<>();
@@ -475,11 +480,23 @@ public class RagService {
             // 문서를 작은 조각으로 분할
             List<Document> splitDocuments = textSplitter.apply(allDocuments);
             
-            // Redis에 직접 문서 저장
+            // 기존 Redis에 저장된 문서 키 확인
+            java.util.Set<String> existingKeys = new java.util.HashSet<>(getAllRedisDocumentKeys());
+            
+            // Redis에 직접 문서 저장 (중복 방지)
             int savedCount = 0;
+            int duplicateCount = 0;
+            
             for (int i = 0; i < splitDocuments.size(); i++) {
                 Document doc = splitDocuments.get(i);
                 String key = "rag:document:" + i;
+                
+                // 중복 체크
+                if (existingKeys.contains(key)) {
+                    duplicateCount++;
+                    System.out.println("🔄 중복 문서 건너뛰기: " + key);
+                    continue;
+                }
                 
                 // 문서 정보를 Map으로 변환하여 Redis에 저장
                 java.util.Map<String, Object> documentData = new java.util.HashMap<>();
@@ -491,20 +508,37 @@ public class RagService {
                 try {
                     redisTemplate.opsForHash().putAll(key, documentData);
                     savedCount++;
+                    System.out.println("💾 Redis 저장 완료: " + key);
                 } catch (Exception e) {
                     System.err.println("❌ Redis 저장 실패 (문서 " + i + "): " + e.getMessage());
                 }
             }
             
             // 벡터 저장소에도 추가 (검색용)
-            vectorStore.add(splitDocuments);
+            if (savedCount > 0) {
+                vectorStore.add(splitDocuments);
+                isInitialized = true;
+            }
             
-            isInitialized = true;
-            System.out.println("📚 총 " + allDocuments.size() + "개 파일(" + savedCount + "개 조각)이 Redis에 저장되었습니다.");
-            return savedCount;
+            String message = String.format("📚 총 %d개 파일 처리 완료: %d개 저장, %d개 중복", 
+                                           allDocuments.size(), savedCount, duplicateCount);
+            System.out.println(message);
+            
+            return java.util.Map.of(
+                "savedCount", savedCount,
+                "duplicateCount", duplicateCount,
+                "totalCount", splitDocuments.size(),
+                "originalFileCount", allDocuments.size(),
+                "message", message
+            );
         } else {
             System.out.println("📂 폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
-            return 0;
+            return java.util.Map.of(
+                "savedCount", 0,
+                "duplicateCount", 0,
+                "totalCount", 0,
+                "message", "폴더에 텍스트 파일이 없습니다."
+            );
         }
     }
 }

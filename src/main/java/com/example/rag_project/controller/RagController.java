@@ -47,8 +47,10 @@ public class RagController {
     @PostMapping("/save")
     public ResponseEntity<RagResponse> saveDocumentsToRedis() {
         try {
-            int savedCount = ragService.saveDocumentsToRedis();
-            return ResponseEntity.ok(RagResponse.success("총 " + savedCount + "개의 문서 조각이 Redis에 저장되었습니다."));
+            java.util.Map<String, Object> result = ragService.saveDocumentsToRedis();
+            String message = result.get("message").toString();
+            
+            return ResponseEntity.ok(RagResponse.success(message, result));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("Redis 저장 실패: " + e.getMessage()));
         }
