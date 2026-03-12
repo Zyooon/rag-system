@@ -18,7 +18,8 @@ public class RagController {
 
     private final RagService ragService;
 
-    @PostMapping("/sync")
+    // 문자 인코딩 설정을 위한 produces 추가
+    @PostMapping(value = "/sync", produces = "application/json; charset=UTF-8")
     public ResponseEntity<RagResponse> initializeDocuments() {
         try {
             ragService.initializeDocuments();
@@ -28,7 +29,7 @@ public class RagController {
         }
     }
 
-    @PostMapping("/ask")
+    @PostMapping(value = "/ask", produces = "application/json; charset=UTF-8")
     public ResponseEntity<RagResponse> query(@RequestBody RagRequest request) {
         try {
             // 항상 출처 정보 포함

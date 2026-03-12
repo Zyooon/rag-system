@@ -10,7 +10,7 @@ import java.text.DecimalFormat;
 @AllArgsConstructor
 public class SourceInfo {
     private String filename;
-    private Integer chunkId;
+    private String chunkId;  // Integer에서 String으로 변경
     private Double similarityScore;
     private String content;
     
@@ -18,10 +18,19 @@ public class SourceInfo {
         SourceInfo source = new SourceInfo();
         source.setFilename(document.getMetadata().getOrDefault("filename", "알 수 없음").toString());
         
-        // chunk_id 설정
+        // chunk_id 설정 (문자열 또는 숫자 처리)
         Object chunkId = document.getMetadata().get("chunk_id");
         if (chunkId != null) {
-            source.setChunkId(((Number) chunkId).intValue());
+            if (chunkId instanceof String) {
+                // 문자열 형태의 chunk_id (예: "sample-doc.txt_0")
+                source.setChunkId((String) chunkId);
+            } else if (chunkId instanceof Number) {
+                // 숫자 형태의 chunk_id - 문자열로 변환
+                source.setChunkId(String.valueOf(((Number) chunkId).intValue()));
+            } else {
+                // 그 외의 경우 문자열로 처리
+                source.setChunkId(chunkId.toString());
+            }
         }
         
         // 소수점 둘째 자리까지 포맷팅

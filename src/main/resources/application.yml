@@ -1,4 +1,9 @@
 spring:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
   ai:
     ollama:
       base-url: http://localhost:11434
@@ -9,7 +14,7 @@ spring:
           top-p: 0.9
           max-tokens: 1000
       embedding:
-        model: llama3
+        model: mxbai-embed-large
   application:
     name: rag-project
   # Redis 설정 (향후 RedisVectorStore 사용 시)
@@ -30,7 +35,7 @@ rag:
   documents:
     folder: ${RAG_DOCUMENTS_FOLDER:documents}
   search:
-    threshold: 0.5
+    threshold: 0.1
   vectorstore:
     type: simple  # redis 또는 simple (현재는 simple만 지원)
 

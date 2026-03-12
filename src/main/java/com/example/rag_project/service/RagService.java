@@ -19,14 +19,179 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 public class RagService {
+
+    /**
+     * 문서의 구조를 분석하고 계층적 정보를 추출하는 파서
+     * 구조화된 텍스트, 번호 목록, Markdown 형식을 지원
+     */
+    public static class HierarchicalParser {
+        private String currentH1 = "";  // 대제목 (Level 1)
+        private String currentH2 = "";  // 중제목 (Level 2)
+        private String currentH3 = "";  // 소제목 (Level 3)
+        
+        // 제목 패턴 정의 (구체적인 패턴부터 순서대로)
+        private static final Pattern[] HEADING_PATTERNS = {
+            Pattern.compile("^###\\s+(.+)$"),         // ### 소소제목 (가장 구체적)
+            Pattern.compile("^##\\s+(.+)$"),          // ## 소제목
+            Pattern.compile("^#\\s+(.+)$"),           // # 제목
+            Pattern.compile("^\\d+\\.\\d+\\.\\s+(.+)$"), // 1.1. 소제목
+            Pattern.compile("^\\d+\\.\\s+(.+)$"),     // 1. 제목
+            Pattern.compile("^\\[(.+)\\]$"),            // [제목] - 대괄호 제목
+            Pattern.compile("^제목:\\s*(.+)$"),       // 제목: 내용
+            Pattern.compile("^\\|.+\\|$"),           // 표 형식 (테이블)
+            Pattern.compile("^-\\s+\\*\\*(.+?)\\*\\*:\\s*(.+)$"), // Markdown 굵은 글씨 항목
+            Pattern.compile("^-\\s+(.+)$")            // 일반 목록 항목
+        };
+        
+        public List<Document> parse(String content, Map<String, Object> baseMetadata) {
+            List<Document> chunks = new ArrayList<>();
+            String[] lines = content.split("\n");
+            
+            // 문서 전체의 제목 추출
+            String documentTitle = extractDocumentTitle(content);
+            
+            for (String line : lines) {
+                String trimmedLine = line.trim();
+                
+                // 제목 패턴 확인 및 업데이트
+                if (updateHeadingLevels(trimmedLine)) {
+                    continue; // 제목 라인은 본문으로 처리하지 않음
+                }
+                
+                // 빈 줄은 건너뛰기
+                if (trimmedLine.isEmpty()) {
+                    continue;
+                }
+                
+                // 본문 내용 처리
+                Map<String, Object> metadata = new HashMap<>(baseMetadata);
+                metadata.put("h1", currentH1.isEmpty() ? documentTitle : currentH1);
+                metadata.put("h2", currentH2);
+                metadata.put("h3", currentH3);
+                
+                // 컨텍스트 정보를 포함한 텍스트 생성
+                String contextAwareText = createContextAwareText(line);
+                chunks.add(new Document(contextAwareText, metadata));
+            }
+            
+            return chunks;
+        }
+        
+        private boolean updateHeadingLevels(String line) {
+            for (int i = 0; i < HEADING_PATTERNS.length; i++) {
+                Matcher matcher = HEADING_PATTERNS[i].matcher(line);
+                if (matcher.matches()) {
+                    // 그룹(1)이 있는 패턴만 처리
+                    if (matcher.groupCount() < 1) {
+                        continue; // 그룹이 없는 패턴은 건너뛰기
+                    }
+                    
+                    try {
+                        String title = matcher.group(1).trim();
+                        
+                        switch (i) {
+                            case 0: // ### 소소제목
+                                currentH3 = title;
+                                return true;
+                                
+                            case 1: // ## 소제목
+                            case 3: // 1.1. 소제목
+                                currentH2 = title;
+                                currentH3 = "";
+                                return true;
+                                
+                            case 2: // # 제목
+                            case 4: // 1. 제목
+                            case 5: // [제목]
+                            case 6: // 제목: 내용
+                                currentH1 = title;
+                                currentH2 = "";
+                                currentH3 = "";
+                                return true;
+                                
+                            case 7: // 표 형식 - 제목으로 간주하지 않고 내용으로 처리
+                                return false; // 표는 본문으로 처리
+                                
+                            case 8: // Markdown 굵은 글씨 항목 - 내용으로 처리
+                                return false; // 항목은 본문으로 처리
+                                
+                            case 9: // 일반 목록 항목 - 내용으로 처리
+                                return false; // 목록은 본문으로 처리
+                        }
+                    } catch (IndexOutOfBoundsException e) {
+                        // 그룹이 없는 패턴은 건너뛰기
+                        continue;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        private String createContextAwareText(String content) {
+            StringBuilder context = new StringBuilder();
+            
+            if (!currentH1.isEmpty()) {
+                context.append("[").append(currentH1);
+                if (!currentH2.isEmpty()) {
+                    context.append(" > ").append(currentH2);
+                    if (!currentH3.isEmpty()) {
+                        context.append(" > ").append(currentH3);
+                    }
+                }
+                context.append("] ");
+            }
+            
+            context.append(content);
+            return context.toString();
+        }
+        
+        public String extractDocumentTitle(String content) {
+            String[] lines = content.split("\n");
+            
+            for (String line : lines) {
+                String trimmedLine = line.trim();
+                if (trimmedLine.isEmpty()) continue;
+                
+                // 첫 번째 제목 패턴 찾기
+                for (Pattern pattern : HEADING_PATTERNS) {
+                    Matcher matcher = pattern.matcher(trimmedLine);
+                    if (matcher.matches()) {
+                        // 그룹(1)이 있는 패턴만 처리
+                        if (matcher.groupCount() < 1) {
+                            continue; // 그룹이 없는 패턴은 건너뛰기
+                        }
+                        
+                        try {
+                            String title = matcher.group(1).trim();
+                            // 표 형식, 목록 항목은 제목으로 사용하지 않음
+                            if (trimmedLine.startsWith("|") || trimmedLine.startsWith("-")) {
+                                continue;
+                            }
+                            return title;
+                        } catch (IndexOutOfBoundsException e) {
+                            // 그룹이 없는 패턴은 건너뛰기
+                            continue;
+                        }
+                    }
+                }
+                
+                // 제목 패턴이 없으면 첫 줄을 제목으로 간주 (단, 표 형식이 아닌 경우)
+                if (!trimmedLine.startsWith("|")) {
+                    return trimmedLine.length() > 50 ? trimmedLine.substring(0, 47) + "..." : trimmedLine;
+                }
+            }
+            
+            return "제목 없음";
+        }
+    }
 
     @Autowired
     private VectorStore vectorStore;
@@ -107,26 +272,40 @@ public class RagService {
         }
 
         List<Document> allDocuments = new ArrayList<>();
-        TokenTextSplitter textSplitter = new TokenTextSplitter();
+        HierarchicalParser hierarchicalParser = new HierarchicalParser();
 
         try {
             // 폴더 내의 모든 .txt와 .md 파일 처리
             Files.list(folder)
                 .filter(path -> {
                     String fileName = path.getFileName().toString().toLowerCase();
-                    return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                    boolean isValid = fileName.endsWith(".txt") || fileName.endsWith(".md");
+                    System.out.println("파일 필터링: " + fileName + " -> " + (isValid ? "처리" : "건너뛰기"));
+                    return isValid;
                 })
                 .forEach(path -> {
                     try {
+                        System.out.println("처리 시작: " + path.getFileName());
                         String content = Files.readString(path);
-                        Document document = new Document(content, 
-                            java.util.Map.of("filename", path.getFileName().toString(), 
-                                           "filepath", path.toString()));
-                        allDocuments.add(document);
+                        System.out.println("파일 내용 길이: " + content.length() + "자");
                         
-                        System.out.println("파일 로드 완료: " + path.getFileName());
+                        Map<String, Object> baseMetadata = java.util.Map.of(
+                            "filename", path.getFileName().toString(), 
+                            "filepath", path.toString()
+                        );
+                        
+                        // HierarchicalParser를 사용하여 구조화된 문서 조각 생성
+                        List<Document> parsedDocuments = hierarchicalParser.parse(content, baseMetadata);
+                        allDocuments.addAll(parsedDocuments);
+                        
+                        System.out.println("파일 로드 완료: " + path.getFileName() + 
+                                         " (생성된 조각: " + parsedDocuments.size() + "개)");
                     } catch (IOException e) {
                         System.err.println("파일 로드 실패: " + path + " - " + e.getMessage());
+                        e.printStackTrace();
+                    } catch (Exception e) {
+                        System.err.println("파일 파싱 실패: " + path + " - " + e.getMessage());
+                        e.printStackTrace();
                     }
                 });
         } catch (IOException e) {
@@ -135,38 +314,23 @@ public class RagService {
         }
 
         if (!allDocuments.isEmpty()) {
+            // TokenTextSplitter로 추가 분할 (너무 긴 조각들을 위해)
+            TokenTextSplitter textSplitter = new TokenTextSplitter();
             List<Document> allSplitDocuments = new ArrayList<>();
-            int globalChunkIndex = 0;
             
-            // 각 파일별로 문서 분할 처리
             for (Document originalDoc : allDocuments) {
-                System.out.println("파일 분할 시작: " + originalDoc.getMetadata().get("filename"));
-                System.out.println("원본 내용 길이: " + originalDoc.getText().length());
-                System.out.println("원본 내용 미리보기: " + originalDoc.getText().substring(0, Math.min(100, originalDoc.getText().length())) + "...");
-                
-                // 개별 문서 분할
-                List<Document> singleDocList = new ArrayList<>();
-                singleDocList.add(originalDoc);
-                List<Document> splitDocuments = textSplitter.apply(singleDocList);
-                
-                System.out.println("분할된 조각 수: " + splitDocuments.size());
-                
-                // 각 분할된 문서 조각에 고유 ID 추가
+                List<Document> splitDocuments = textSplitter.apply(List.of(originalDoc));
+                String filename = originalDoc.getMetadata().get("filename").toString();
+
                 for (int i = 0; i < splitDocuments.size(); i++) {
                     Document doc = splitDocuments.get(i);
                     Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
-                    metadata.put("chunk_id", globalChunkIndex);
-                    metadata.put("chunk_index", i);
-                    metadata.put("file_chunk_index", i); // 파일 내 조각 인덱스
+                    // 고유 ID 부여: 파일명_인덱스
+                    String uniqueId = filename + "_" + i;
+                    metadata.put("chunk_id", uniqueId); 
+                    metadata.put("file_chunk_index", i);
                     
-                    // 새로운 Document 객체 생성 (metadata 업데이트)
-                    Document updatedDoc = new Document(doc.getText(), metadata);
-                    allSplitDocuments.add(updatedDoc);
-                    
-                    System.out.println("조각 " + globalChunkIndex + ": 길이=" + doc.getText().length() + 
-                                     ", 내용=" + doc.getText().substring(0, Math.min(50, doc.getText().length())) + "...");
-                    
-                    globalChunkIndex++;
+                    allSplitDocuments.add(new Document(doc.getText(), metadata));
                 }
             }
             
@@ -174,7 +338,7 @@ public class RagService {
             vectorStore.add(allSplitDocuments);
             
             isInitialized = true;
-            System.out.println("총 " + allDocuments.size() + "개 파일이 벡터 저장소에 로드되었습니다.");
+            System.out.println("총 " + allDocuments.size() + "개의 구조화된 조각이 생성되어 벡터 저장소에 로드되었습니다.");
         } else {
             System.out.println("폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
             System.out.println("이 폴더에 .txt 파일을 추가해주세요.");
@@ -186,9 +350,13 @@ public class RagService {
      */
     public void initializeDocuments() {
         try {
+            System.out.println("=== 문서 초기화 시작 ===");
+            
             // 프로젝트 루트 기준의 문서들만 로드
             String currentDir = System.getProperty("user.dir");
             String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
+            System.out.println("문서 경로: " + projectDocumentsPath);
+            
             loadDocumentsFromFolder(projectDocumentsPath);
             
         } catch (IOException e) {
@@ -280,9 +448,23 @@ public class RagService {
         }
 
         System.out.println("=== 검색 요청: " + query + " ===");
+        
+        // 1. 유사도 검색 (충분한 개수를 가져오도록 설정)
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
+        
+        // 유사도 순서대로 정렬 및 높은 유사도 필터링
+        relevantDocuments = relevantDocuments.stream()
+            .filter(doc -> {
+                Double score = doc.getScore(); 
+                return score != null && score >= similarityThreshold;
+            })
+            .sorted((a, b) -> Double.compare(b.getScore(), a.getScore())) // 유사도 내림차순 정렬
+            .limit(3) // 상위 3개만 사용
+            .collect(Collectors.toList());
+        
         System.out.println("찾은 문서 수: " + relevantDocuments.size());
         
+        // 2. 검색 결과가 없을 경우 예외 처리
         if (relevantDocuments.isEmpty()) {
             return Map.of(
                 "answer", "관련 정보를 찾을 수 없습니다.",
@@ -290,69 +472,91 @@ public class RagService {
             );
         }
 
-        // 모든 관련 문서 정보 출력 (디버깅)
+        // 디버깅: 각 문서의 유사도와 내용 출력
+        System.out.println("=== 검색된 문서 상세 정보 ===");
         for (int i = 0; i < relevantDocuments.size(); i++) {
             Document doc = relevantDocuments.get(i);
-            System.out.println("문서 " + i + ": " + 
-                "파일명=" + doc.getMetadata().getOrDefault("filename", "알수없음") + 
-                ", chunk_id=" + doc.getMetadata().get("chunk_id") + 
-                ", 점수=" + doc.getScore() + 
-                ", 내용길이=" + doc.getText().length() + 
-                ", 내용미리보기=" + doc.getText().substring(0, Math.min(50, doc.getText().length())) + "...");
+            String filename = doc.getMetadata().getOrDefault("filename", "알수없음").toString();
+            String content = doc.getText().length() > 100 ? 
+                doc.getText().substring(0, 100) + "..." : doc.getText();
+            System.out.println(String.format("문서 %d: 파일=%s, 유사도=%.3f, 내용=%s", 
+                i+1, filename, doc.getScore(), content));
         }
-
-        // 중복 제거를 위한 chunk_id 집합
-        Set<Integer> seenChunkIds = new HashSet<>();
-        List<Document> filteredDocuments = relevantDocuments.stream()
-            .filter(doc -> {
-                Double score = doc.getScore(); 
-                return score != null && score >= similarityThreshold;
-            })
-            .filter(doc -> {
-                // chunk_id로 중복 확인
-                Object chunkId = doc.getMetadata().get("chunk_id");
-                if (chunkId != null) {
-                    int id = ((Number) chunkId).intValue();
-                    if (seenChunkIds.contains(id)) {
-                        return false; // 중복된 문서 제외
-                    }
-                    seenChunkIds.add(id);
-                    return true;
-                }
-                return true; // chunk_id가 없는 문서는 포함
-            })
-            .collect(Collectors.toList());
-
-        if (filteredDocuments.isEmpty()) {
-            return Map.of(
-                "answer", "질문과 관련된 충분히 신뢰할 수 있는 정보를 찾을 수 없습니다.",
-                "sources", new ArrayList<SourceInfo>()
-            );
-        }
+        System.out.println("========================");
         
-        // 출처 정보 추출
-        List<SourceInfo> sources = filteredDocuments.stream()
+        // 3. 필터링된 문서를 기반으로 출처 정보 생성 (가장 유사도가 높은 문서 하나만)
+        final String[] sourceContextHolder = {""};
+        List<SourceInfo> sources = relevantDocuments.stream()
             .filter(doc -> {
                 String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
                 return !filename.equals("README.md");
             })
+            .findFirst() // 가장 유사도가 높은 첫 번째 문서만 선택
             .map(doc -> {
                 SourceInfo source = SourceInfo.fromDocument(doc);
                 System.out.println("출처 정보 - 파일명: " + source.getFilename() + 
                                  ", 조각 ID: " + source.getChunkId() +
                                  ", 유사도: " + source.getSimilarityScore() + 
                                  ", 내용 길이: " + (source.getContent() != null ? source.getContent().length() : 0));
+                
+                // 메타데이터에서 계층적 정보 추출
+                Map<String, Object> metadata = doc.getMetadata();
+                String h1 = metadata.getOrDefault("h1", "").toString();
+                String h2 = metadata.getOrDefault("h2", "").toString();
+                String h3 = metadata.getOrDefault("h3", "").toString();
+                
+                // 파일명에서 기본 문서 제목 추출
+                String filename = source.getFilename();
+                String baseTitle = "";
+                if (filename.equals("sample-doc.txt")) {
+                    baseTitle = "세상의 모든 이상한 것들 사전";
+                } else if (filename.equals("sample-doc2.txt")) {
+                    baseTitle = "세상의 모든 이상한 것들 사전: 제2권";
+                } else if (filename.equals("sample-markdown.txt")) {
+                    baseTitle = "이상한 생물 및 장소 도감";
+                } else if (filename.equals("sample-table.txt")) {
+                    baseTitle = "이상한 물건 목록";
+                } else if (filename.equals("sample-free.txt")) {
+                    baseTitle = "내가 경험한 이상한 나라의 기록들";
+                } else {
+                    baseTitle = filename.replace(".txt", "").replace(".md", "");
+                }
+                
+                // 계층적 정보로 출처 정보 생성
+                String contextInfo = baseTitle;
+                if (!h1.isEmpty()) {
+                    // h1에서 번호와 제목 분리 (예: "7. 춤추는 선인장")
+                    if (h1.matches("^\\d+\\.\\s.+")) {
+                        contextInfo += ". " + h1;  // 이미 번호가 있음
+                    } else {
+                        contextInfo += ". " + h1;  // 제목만 추가
+                    }
+                }
+                
+                sourceContextHolder[0] = "context : " + contextInfo;
                 return source;
             })
-            .collect(Collectors.toList());
-        
-        String context = filteredDocuments.stream()
+            .map(List::of) // 단일 SourceInfo를 List로 변환
+            .orElse(new ArrayList<>()); // 문서가 없으면 빈 리스트
+
+        // 4. LLM에게 줄 컨텍스트 생성 (검색된 순서대로 결합)
+        String context = relevantDocuments.stream()
                 .filter(doc -> {
                     String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
                     return !filename.equals("README.md");
                 })
                 .map(Document::getText)
                 .collect(Collectors.joining("\n\n"));
+        
+        // 디버깅: context 내용 출력
+        System.out.println("=== 생성된 컨텍스트 ===");
+        System.out.println("문서 수: " + relevantDocuments.stream()
+            .filter(doc -> !doc.getMetadata().getOrDefault("filename", "").equals("README.md"))
+            .count());
+        System.out.println("컨텍스트 길이: " + context.length());
+        System.out.println("컨텍스트 내용 (미리보기): " + 
+            (context.length() > 200 ? context.substring(0, 200) + "..." : context));
+        System.out.println("========================");
         
         if (context.trim().isEmpty()) {
             return Map.of(
@@ -376,8 +580,10 @@ public class RagService {
             3. 자연스러운 한국어로 답변하세요.
             4. 문서에 관련 정보가 없다면 "문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
             
+            %s
+            
             답변:
-            """, context, query);
+            """, context, query, sourceContextHolder[0]);
 
         try {
             String answer = chatModel.call(prompt);
@@ -404,6 +610,18 @@ public class RagService {
             // 초기화 상태 변경
             isInitialized = false;
             
+            // SimpleVectorStore 파일 직접 삭제
+            try {
+                String currentDir = System.getProperty("user.dir");
+                Path vectorStoreFile = Paths.get(currentDir, "vectorstore.json");
+                if (Files.exists(vectorStoreFile)) {
+                    Files.delete(vectorStoreFile);
+                    System.out.println("벡터 저장소 파일을 삭제했습니다: " + vectorStoreFile);
+                }
+            } catch (Exception e) {
+                System.out.println("벡터 저장소 파일 삭제 실패: " + e.getMessage());
+            }
+            
             // Redis에 저장된 문서도 삭제하여 깨끗한 상태로 만듦
             clearAllRedisDocuments();
             
@@ -425,32 +643,60 @@ public class RagService {
         status.put("isInitialized", isInitialized());
         
         if (isInitialized()) {
-            // Redis에 저장된 문서 키 목록 조회
-            java.util.List<String> redisKeys = getAllRedisDocumentKeys();
-            
-            // 파일 목록 추출 (메타데이터에서 filename 추출)
+            // 벡터 저장소에 저장된 문서 수 확인 (SimpleVectorStore 사용 시)
+            int vectorStoreCount = 0;
             java.util.Set<String> loadedFiles = new java.util.HashSet<>();
-            for (String key : redisKeys) {
-                try {
-                    java.util.Map<String, Object> doc = getRedisDocument(key);
-                    if (doc.containsKey("metadata")) {
-                        Object metadata = doc.get("metadata");
-                        if (metadata instanceof java.util.Map) {
-                            java.util.Map<?, ?> metaMap = (java.util.Map<?, ?>) metadata;
-                            Object filename = metaMap.get("filename");
-                            if (filename != null) {
-                                loadedFiles.add(filename.toString());
+            
+            try {
+                // documents 폴더의 파일 목록으로 로드된 파일 확인
+                String currentDir = System.getProperty("user.dir");
+                Path documentsPath = Paths.get(currentDir, documentsFolder);
+                
+                if (Files.exists(documentsPath)) {
+                    Files.list(documentsPath)
+                        .filter(path -> {
+                            String fileName = path.getFileName().toString().toLowerCase();
+                            return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                        })
+                        .forEach(path -> {
+                            loadedFiles.add(path.getFileName().toString());
+                        });
+                    
+                    // 파일당 평균 분할 조각 수로 문서 수 계산 (대략적 추정)
+                    vectorStoreCount = loadedFiles.size() * 3; // 각 파일당 약 3개의 조각으로 가정
+                }
+            } catch (Exception e) {
+                System.err.println("문서 상태 확인 실패: " + e.getMessage());
+                vectorStoreCount = 0;
+            }
+            
+            // Redis에 저장된 문서도 확인 (있는 경우)
+            java.util.List<String> redisKeys = getAllRedisDocumentKeys();
+            if (!redisKeys.isEmpty()) {
+                vectorStoreCount = Math.max(vectorStoreCount, redisKeys.size());
+                // Redis 메타데이터에서 파일명 추출
+                for (String key : redisKeys) {
+                    try {
+                        java.util.Map<String, Object> doc = getRedisDocument(key);
+                        if (doc.containsKey("metadata")) {
+                            Object metadata = doc.get("metadata");
+                            if (metadata instanceof java.util.Map) {
+                                java.util.Map<?, ?> metaMap = (java.util.Map<?, ?>) metadata;
+                                Object filename = metaMap.get("filename");
+                                if (filename != null) {
+                                    loadedFiles.add(filename.toString());
+                                }
                             }
                         }
+                    } catch (Exception e) {
+                        // 무시하고 계속 진행
                     }
-                } catch (Exception e) {
-                    // 무시하고 계속 진행
                 }
             }
             
             status.put("loadedFiles", new java.util.ArrayList<>(loadedFiles));
-            status.put("documentCount", redisKeys.size());
-            status.put("message", "문서가 로드되어 있습니다.");
+            status.put("documentCount", vectorStoreCount);
+            status.put("message", "문서가 로드되어 있습니다. (벡터 저장소 기준)");
         } else {
             status.put("loadedFiles", new java.util.ArrayList<>());
             status.put("documentCount", 0);

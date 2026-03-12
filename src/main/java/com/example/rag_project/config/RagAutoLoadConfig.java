@@ -32,11 +32,15 @@ public class RagAutoLoadConfig {
             log.info("RAG 자동 로드 시작...");
             
             try {
+                // 항상 파일 시스템에서 문서를 먼저 로드
+                log.info("파일 시스템에서 문서를 로드합니다...");
+                ragService.initializeDocuments();
+                
                 // Redis에 저장된 문서 키 확인
                 Set<String> redisKeys = redisTemplate.keys("rag:document:*");
                 
                 if (redisKeys != null && !redisKeys.isEmpty()) {
-                    log.info("Redis에 {}개의 문서가 발견되었습니다. 자동으로 로드합니다.", redisKeys.size());
+                    log.info("Redis에 {}개의 추가 문서가 발견되었습니다.", redisKeys.size());
                     
                     // Redis에서 문서 데이터 로드
                     List<Map<String, Object>> documents = ragService.getAllRedisDocuments();
@@ -45,18 +49,18 @@ public class RagAutoLoadConfig {
                         // 문서 내용을 벡터 저장소에 로드
                         ragService.loadDocumentsFromRedis();
                         
-                        log.info("RAG 문서 자동 로드 완료: {}개 문서", documents.size());
-                        log.info("이제 질의응답을 바로 사용할 수 있습니다.");
-                    } else {
-                        log.warn("Redis 키는 있지만 문서 내용이 없습니다.");
+                        log.info("Redis 문서 추가 로드 완료: {}개 문서", documents.size());
                     }
                 } else {
-                    log.info("Redis에 저장된 문서가 없습니다. /api/rag/init 또는 /api/rag/save를 호출하여 문서를 추가해주세요.");
+                    log.info("Redis에 저장된 추가 문서가 없습니다.");
                 }
+                
+                log.info("RAG 문서 자동 로드 완료");
+                log.info("이제 질의응답을 바로 사용할 수 있습니다.");
                 
             } catch (Exception e) {
                 log.error("RAG 자동 로드 실패: {}", e.getMessage(), e);
-                log.info("수동으로 /api/rag/init을 호출하여 문서를 로드할 수 있습니다.");
+                log.info("수동으로 /api/rag/reload를 호출하여 문서를 다시 로드할 수 있습니다.");
             }
             
             log.info("RAG 자동 로드 종료");
