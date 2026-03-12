@@ -19,8 +19,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -199,90 +201,6 @@ public class RagService {
         }
     }
 
-    /**
-     * 일반 텍스트를 마크다운 형식으로 변환하는 메서드
-     * 구조화된 정보를 마크다운 형식으로 재구성하여 검색 품질 향상
-     */
-    private String convertToMarkdown(String content, String filename) {
-        StringBuilder markdown = new StringBuilder();
-        String[] lines = content.split("\n");
-        
-        // 파일명을 기본 제목으로 사용
-        String baseTitle = filename.replace(".txt", "").replace(".md", "");
-        markdown.append("# ").append(baseTitle).append("\n\n");
-        
-        for (String line : lines) {
-            String trimmedLine = line.trim();
-            
-            if (trimmedLine.isEmpty()) {
-                markdown.append("\n");
-                continue;
-            }
-            
-            // 제목 패턴 확인
-            boolean isHeading = false;
-            for (int i = 0; i < HierarchicalParser.HEADING_PATTERNS.length; i++) {
-                Pattern pattern = HierarchicalParser.HEADING_PATTERNS[i];
-                Matcher matcher = pattern.matcher(trimmedLine);
-                
-                if (matcher.matches() && matcher.groupCount() >= 1) {
-                    try {
-                        String title = matcher.group(1).trim();
-                        
-                        switch (i) {
-                            case 0: // ### 소소제목
-                                markdown.append("### ").append(title).append("\n\n");
-                                isHeading = true;
-                                break;
-                            case 1: // ## 소제목
-                                markdown.append("## ").append(title).append("\n\n");
-                                isHeading = true;
-                                break;
-                            case 2: // # 제목
-                                markdown.append("# ").append(title).append("\n\n");
-                                isHeading = true;
-                                break;
-                            case 3: // Markdown 굵은 글씨 항목
-                                markdown.append("- **").append(title).append("**\n\n");
-                                isHeading = true;
-                                break;
-                            case 4: // 일반 목록 항목
-                                markdown.append("- ").append(title).append("\n");
-                                isHeading = true;
-                                break;
-                            case 5: // 1.1. 소제목
-                                markdown.append("## ").append(title).append("\n\n");
-                                isHeading = true;
-                                break;
-                            case 6: // 1. 제목
-                            case 7: // [제목]
-                            case 8: // 제목: 내용
-                                markdown.append("# ").append(title).append("\n\n");
-                                isHeading = true;
-                                break;
-                            case 9: // 표 형식
-                                markdown.append("| ").append(trimmedLine.substring(1, trimmedLine.length()-1).replace(" | ", " | ")).append(" |\n");
-                                isHeading = true;
-                                break;
-                        }
-                    } catch (IndexOutOfBoundsException e) {
-                        // 그룹이 없는 패턴은 건너뛰기
-                        continue;
-                    }
-                    
-                    if (isHeading) break;
-                }
-            }
-            
-            // 제목이 아닌 일반 텍스트는 그대로 추가
-            if (!isHeading) {
-                markdown.append(trimmedLine).append("\n\n");
-            }
-        }
-        
-        return markdown.toString();
-    }
-
     @Autowired
     private VectorStore vectorStore;
 
@@ -302,6 +220,9 @@ public class RagService {
 
     @Value("${rag.search.threshold:0.7}") // 설정이 없으면 0.7을 기본으로 사용
     private double similarityThreshold;
+
+    @Value("${rag.search.max-results:5}") // 설정이 없으면 5를 기본으로 사용
+    private int maxSearchResults;
 
     /**
      * 텍스트 파일을 읽어서 벡터 저장소에 로드하는 메서드
@@ -362,7 +283,8 @@ public class RagService {
         }
 
         List<Document> allDocuments = new ArrayList<>();
-        HierarchicalParser hierarchicalParser = new HierarchicalParser();
+        // 기본 TokenTextSplitter 사용 (자동으로 최적화된 크기로 분할)
+        TokenTextSplitter textSplitter = new TokenTextSplitter();
 
         try {
             // 폴더 내의 모든 .txt와 .md 파일 처리
@@ -379,23 +301,33 @@ public class RagService {
                         String content = Files.readString(path);
                         System.out.println("파일 내용 길이: " + content.length() + "자");
                         
-                        // 모든 문서를 마크다운으로 변환
                         String filename = path.getFileName().toString();
-                        String markdownContent = convertToMarkdown(content, filename);
-                        System.out.println("마크다운 변환 완료: " + filename);
                         
-                        Map<String, Object> baseMetadata = java.util.Map.of(
-                            "filename", filename, 
-                            "filepath", path.toString(),
-                            "format", "markdown" // 마크다운 형식임을 표시
-                        );
+                        // 기본 메타데이터 생성
+                        Map<String, Object> baseMetadata = new HashMap<>();
+                        baseMetadata.put("filename", filename);
+                        baseMetadata.put("filepath", path.toString());
                         
-                        // HierarchicalParser를 사용하여 구조화된 문서 조각 생성
-                        List<Document> parsedDocuments = hierarchicalParser.parse(markdownContent, baseMetadata);
-                        allDocuments.addAll(parsedDocuments);
+                        // 구조화된 파서로 문서 분할
+                        HierarchicalParser parser = new HierarchicalParser();
+                        List<Document> parsedDocuments = parser.parse(content, baseMetadata);
+                        
+                        // 너무 긴 문서는 TokenTextSplitter로 추가 분할
+                        List<Document> finalDocuments = new ArrayList<>();
+                        for (Document doc : parsedDocuments) {
+                            if (doc.getText().length() > 800) {
+                                // 긴 문서는 추가 분할
+                                List<Document> splitLongDocs = textSplitter.apply(List.of(doc));
+                                finalDocuments.addAll(splitLongDocs);
+                            } else {
+                                finalDocuments.add(doc);
+                            }
+                        }
+                        
+                        allDocuments.addAll(finalDocuments);
                         
                         System.out.println("파일 로드 완료: " + path.getFileName() + 
-                                         " (생성된 조각: " + parsedDocuments.size() + "개)");
+                                         " (생성된 조각: " + finalDocuments.size() + "개)");
                     } catch (IOException e) {
                         System.err.println("파일 로드 실패: " + path + " - " + e.getMessage());
                         e.printStackTrace();
@@ -410,28 +342,25 @@ public class RagService {
         }
 
         if (!allDocuments.isEmpty()) {
-            // TokenTextSplitter로 추가 분할 (너무 긴 조각들을 위해)
-            TokenTextSplitter textSplitter = new TokenTextSplitter();
-            List<Document> allSplitDocuments = new ArrayList<>();
+            // 고유 ID 부여 및 최종 문서 리스트 생성
+            List<Document> finalDocuments = new ArrayList<>();
+            int globalChunkIndex = 0;
             
             for (Document originalDoc : allDocuments) {
-                List<Document> splitDocuments = textSplitter.apply(List.of(originalDoc));
                 String filename = originalDoc.getMetadata().get("filename").toString();
-
-                for (int i = 0; i < splitDocuments.size(); i++) {
-                    Document doc = splitDocuments.get(i);
-                    Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
-                    // 고유 ID 부여: 파일명_인덱스
-                    String uniqueId = filename + "_" + i;
-                    metadata.put("chunk_id", uniqueId); 
-                    metadata.put("file_chunk_index", i);
-                    
-                    allSplitDocuments.add(new Document(doc.getText(), metadata));
-                }
+                
+                // 고유 ID 부여
+                Map<String, Object> metadata = new HashMap<>(originalDoc.getMetadata());
+                String uniqueId = filename + "_" + globalChunkIndex;
+                metadata.put("chunk_id", uniqueId); 
+                metadata.put("file_chunk_index", globalChunkIndex);
+                
+                finalDocuments.add(new Document(originalDoc.getText(), metadata));
+                globalChunkIndex++;
             }
             
             // 벡터 저장소에 추가
-            vectorStore.add(allSplitDocuments);
+            vectorStore.add(finalDocuments);
             
             isInitialized = true;
             System.out.println("총 " + allDocuments.size() + "개의 구조화된 조각이 생성되어 벡터 저장소에 로드되었습니다.");
@@ -545,7 +474,7 @@ public class RagService {
 
         System.out.println("=== 검색 요청: " + query + " ===");
         
-        // 1. 유사도 검색 (충분한 개수를 가져오도록 설정)
+        // 1. 유사도 검색 (기본 검색 후 개수 제한)
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
         
         // 유사도 순서대로 정렬 및 높은 유사도 필터링
@@ -555,7 +484,7 @@ public class RagService {
                 return score != null && score >= similarityThreshold;
             })
             .sorted((a, b) -> Double.compare(b.getScore(), a.getScore())) // 유사도 내림차순 정렬
-            .limit(3) // 상위 3개만 사용
+            .limit(maxSearchResults) // 설정된 최대 결과 개수로 제한
             .collect(Collectors.toList());
         
         System.out.println("찾은 문서 수: " + relevantDocuments.size());
@@ -580,14 +509,30 @@ public class RagService {
         }
         System.out.println("========================");
         
-        // 3. 필터링된 문서를 기반으로 출처 정보 생성 (가장 유사도가 높은 문서 하나만)
+        // 3. 필터링된 문서를 기반으로 출처 정보 생성 (중복 제거)
         final String[] sourceContextHolder = {""};
+        Set<String> processedChunks = new HashSet<>(); // 중복 조각 추적용
         List<SourceInfo> sources = relevantDocuments.stream()
             .filter(doc -> {
                 String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
                 return !filename.equals("README.md");
             })
-            .findFirst() // 가장 유사도가 높은 첫 번째 문서만 선택
+            .filter(doc -> {
+                // 동일한 파일과 유사도를 가진 중복 문서 필터링
+                String filename = doc.getMetadata().getOrDefault("filename", "").toString();
+                Double score = doc.getScore();
+                
+                // 고유 식별자 생성: 파일명+유사도+내용해시
+                String contentHash = String.valueOf(doc.getText().hashCode());
+                String uniqueKey = filename + "|" + score + "|" + contentHash;
+                
+                if (processedChunks.contains(uniqueKey)) {
+                    return false; // 중복 문서 건너뛰기
+                }
+                processedChunks.add(uniqueKey);
+                return true;
+            })
+            .limit(3) // 최대 3개의 출처만 선택
             .map(doc -> {
                 SourceInfo source = SourceInfo.fromDocument(doc);
                 System.out.println("출처 정보 - 파일명: " + source.getFilename() + 
@@ -598,8 +543,6 @@ public class RagService {
                 // 메타데이터에서 계층적 정보 추출
                 Map<String, Object> metadata = doc.getMetadata();
                 String h1 = metadata.getOrDefault("h1", "").toString();
-                String h2 = metadata.getOrDefault("h2", "").toString();
-                String h3 = metadata.getOrDefault("h3", "").toString();
                 
                 // 파일명에서 기본 문서 제목 추출
                 String filename = source.getFilename();
@@ -632,8 +575,7 @@ public class RagService {
                 sourceContextHolder[0] = "context : " + contextInfo;
                 return source;
             })
-            .map(List::of) // 단일 SourceInfo를 List로 변환
-            .orElse(new ArrayList<>()); // 문서가 없으면 빈 리스트
+            .collect(Collectors.toList());
 
         // 4. LLM에게 줄 컨텍스트 생성 (검색된 순서대로 결합)
         String context = relevantDocuments.stream()

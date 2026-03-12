@@ -35,7 +35,8 @@ rag:
   documents:
     folder: ${RAG_DOCUMENTS_FOLDER:documents}
   search:
-    threshold: 0.1
+    threshold: 0.3
+    max-results: 5
   vectorstore:
     type: simple  # redis 또는 simple (현재는 simple만 지원)
 
