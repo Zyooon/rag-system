@@ -420,6 +420,49 @@ public class RagService {
     }
 
     /**
+     * Redis에 저장된 문서들을 벡터 저장소에 로드하는 메서드
+     */
+    public void loadDocumentsFromRedis() {
+        try {
+            List<Map<String, Object>> redisDocuments = getAllRedisDocuments();
+            
+            if (redisDocuments.isEmpty()) {
+                System.out.println("📂 Redis에 저장된 문서가 없습니다.");
+                return;
+            }
+            
+            List<Document> documents = new ArrayList<>();
+            
+            for (Map<String, Object> redisDoc : redisDocuments) {
+                String content = (String) redisDoc.get("content");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> metadata = (Map<String, Object>) redisDoc.get("metadata");
+                
+                if (content != null && !content.trim().isEmpty()) {
+                    Document document = new Document(content, metadata);
+                    documents.add(document);
+                }
+            }
+            
+            if (!documents.isEmpty()) {
+                // 문서를 작은 조각으로 분할
+                TokenTextSplitter textSplitter = new TokenTextSplitter();
+                List<Document> splitDocuments = textSplitter.apply(documents);
+                
+                // 벡터 저장소에 추가
+                vectorStore.add(splitDocuments);
+                
+                isInitialized = true;
+                System.out.println("📚 Redis에서 " + documents.size() + "개 문서를 벡터 저장소에 로드했습니다.");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Redis 문서 로드 실패: " + e.getMessage());
+            throw new RuntimeException("Redis 문서 로드 중 오류 발생", e);
+        }
+    }
+
+    /**
      * 특정 폴더의 문서들을 Redis에 저장하는 메서드 (중복 방지)
      * @param folderPath 문서 폴더 경로
      * @return 저장 결과 정보
