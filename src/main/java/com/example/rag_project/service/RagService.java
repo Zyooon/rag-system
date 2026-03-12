@@ -11,14 +11,18 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import com.example.rag_project.dto.SourceInfo;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -131,11 +135,43 @@ public class RagService {
         }
 
         if (!allDocuments.isEmpty()) {
-            // 문서를 작은 조각으로 분할
-            List<Document> splitDocuments = textSplitter.apply(allDocuments);
+            List<Document> allSplitDocuments = new ArrayList<>();
+            int globalChunkIndex = 0;
+            
+            // 각 파일별로 문서 분할 처리
+            for (Document originalDoc : allDocuments) {
+                System.out.println("파일 분할 시작: " + originalDoc.getMetadata().get("filename"));
+                System.out.println("원본 내용 길이: " + originalDoc.getText().length());
+                System.out.println("원본 내용 미리보기: " + originalDoc.getText().substring(0, Math.min(100, originalDoc.getText().length())) + "...");
+                
+                // 개별 문서 분할
+                List<Document> singleDocList = new ArrayList<>();
+                singleDocList.add(originalDoc);
+                List<Document> splitDocuments = textSplitter.apply(singleDocList);
+                
+                System.out.println("분할된 조각 수: " + splitDocuments.size());
+                
+                // 각 분할된 문서 조각에 고유 ID 추가
+                for (int i = 0; i < splitDocuments.size(); i++) {
+                    Document doc = splitDocuments.get(i);
+                    Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
+                    metadata.put("chunk_id", globalChunkIndex);
+                    metadata.put("chunk_index", i);
+                    metadata.put("file_chunk_index", i); // 파일 내 조각 인덱스
+                    
+                    // 새로운 Document 객체 생성 (metadata 업데이트)
+                    Document updatedDoc = new Document(doc.getText(), metadata);
+                    allSplitDocuments.add(updatedDoc);
+                    
+                    System.out.println("조각 " + globalChunkIndex + ": 길이=" + doc.getText().length() + 
+                                     ", 내용=" + doc.getText().substring(0, Math.min(50, doc.getText().length())) + "...");
+                    
+                    globalChunkIndex++;
+                }
+            }
             
             // 벡터 저장소에 추가
-            vectorStore.add(splitDocuments);
+            vectorStore.add(allSplitDocuments);
             
             isInitialized = true;
             System.out.println("총 " + allDocuments.size() + "개 파일이 벡터 저장소에 로드되었습니다.");
@@ -209,31 +245,151 @@ public class RagService {
         }
         
         String prompt = String.format("""
-            당신은 한국어 전문가입니다. 반드시 한국어로만 답변해야 합니다.
-            
-            아래 [문서 내용]을 바탕으로 사용자의 질문에 한국어로 답변하세요.
-            
-            중요 지침:
-            1. 반드시 한국어로만 답변하세요. 영어 답변은 절대 허용되지 않습니다.
-            2. 문서에 없는 내용은 절대로 지어내지 마세요.
-            3. 제공된 문서의 내용만 바탕으로 답변하세요.
-            4. 자연스러운 한국어 문장으로 답변하세요.
-            5. 문서 내용을 요약하거나 설명하는 형태로 답변하세요.
+            당신은 주어진 문서 내용을 바탕으로 질문에 답변하는 AI 어시스턴트입니다.
             
             [문서 내용]
             %s
             
-            [질문]
+            [사용자 질문]
             %s
             
-            [답변]
-            반드시 위 질문에 대해 한국어로 답변을 시작하세요:
+            답변 지침:
+            1. 문서 내용만 사용하여 답변하세요.
+            2. 질문에 직접적으로 답변하세요.
+            3. 자연스러운 한국어로 답변하세요.
+            4. 문서에 관련 정보가 없다면 "문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
+            
+            답변:
             """, context, query);
 
         try {
             return chatModel.call(prompt);
         } catch (Exception e) {
             return "AI 답변 생성 중 오류: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 사용자 질문에 대해 RAG를 통해 답변을 생성하고 출처 정보도 함께 반환하는 메서드
+     * @param query 사용자의 질문
+     * @return 답변과 출처 정보를 포함하는 Map
+     */
+    public Map<String, Object> searchAndAnswerWithSources(String query) {
+        if (!isInitialized) {
+            initializeDocuments();
+        }
+
+        System.out.println("=== 검색 요청: " + query + " ===");
+        List<Document> relevantDocuments = vectorStore.similaritySearch(query);
+        System.out.println("찾은 문서 수: " + relevantDocuments.size());
+        
+        if (relevantDocuments.isEmpty()) {
+            return Map.of(
+                "answer", "관련 정보를 찾을 수 없습니다.",
+                "sources", new ArrayList<SourceInfo>()
+            );
+        }
+
+        // 모든 관련 문서 정보 출력 (디버깅)
+        for (int i = 0; i < relevantDocuments.size(); i++) {
+            Document doc = relevantDocuments.get(i);
+            System.out.println("문서 " + i + ": " + 
+                "파일명=" + doc.getMetadata().getOrDefault("filename", "알수없음") + 
+                ", chunk_id=" + doc.getMetadata().get("chunk_id") + 
+                ", 점수=" + doc.getScore() + 
+                ", 내용길이=" + doc.getText().length() + 
+                ", 내용미리보기=" + doc.getText().substring(0, Math.min(50, doc.getText().length())) + "...");
+        }
+
+        // 중복 제거를 위한 chunk_id 집합
+        Set<Integer> seenChunkIds = new HashSet<>();
+        List<Document> filteredDocuments = relevantDocuments.stream()
+            .filter(doc -> {
+                Double score = doc.getScore(); 
+                return score != null && score >= similarityThreshold;
+            })
+            .filter(doc -> {
+                // chunk_id로 중복 확인
+                Object chunkId = doc.getMetadata().get("chunk_id");
+                if (chunkId != null) {
+                    int id = ((Number) chunkId).intValue();
+                    if (seenChunkIds.contains(id)) {
+                        return false; // 중복된 문서 제외
+                    }
+                    seenChunkIds.add(id);
+                    return true;
+                }
+                return true; // chunk_id가 없는 문서는 포함
+            })
+            .collect(Collectors.toList());
+
+        if (filteredDocuments.isEmpty()) {
+            return Map.of(
+                "answer", "질문과 관련된 충분히 신뢰할 수 있는 정보를 찾을 수 없습니다.",
+                "sources", new ArrayList<SourceInfo>()
+            );
+        }
+        
+        // 출처 정보 추출
+        List<SourceInfo> sources = filteredDocuments.stream()
+            .filter(doc -> {
+                String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
+                return !filename.equals("README.md");
+            })
+            .map(doc -> {
+                SourceInfo source = SourceInfo.fromDocument(doc);
+                System.out.println("출처 정보 - 파일명: " + source.getFilename() + 
+                                 ", 조각 ID: " + source.getChunkId() +
+                                 ", 유사도: " + source.getSimilarityScore() + 
+                                 ", 내용 길이: " + (source.getContent() != null ? source.getContent().length() : 0));
+                return source;
+            })
+            .collect(Collectors.toList());
+        
+        String context = filteredDocuments.stream()
+                .filter(doc -> {
+                    String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
+                    return !filename.equals("README.md");
+                })
+                .map(Document::getText)
+                .collect(Collectors.joining("\n\n"));
+        
+        if (context.trim().isEmpty()) {
+            return Map.of(
+                "answer", "관련 정보를 찾을 수 없습니다.",
+                "sources", new ArrayList<SourceInfo>()
+            );
+        }
+        
+        String prompt = String.format("""
+            당신은 주어진 문서 내용을 바탕으로 질문에 답변하는 AI 어시스턴트입니다.
+            
+            [문서 내용]
+            %s
+            
+            [사용자 질문]
+            %s
+            
+            답변 지침:
+            1. 문서 내용만 사용하여 답변하세요.
+            2. 질문에 직접적으로 답변하세요.
+            3. 자연스러운 한국어로 답변하세요.
+            4. 문서에 관련 정보가 없다면 "문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
+            
+            답변:
+            """, context, query);
+
+        try {
+            String answer = chatModel.call(prompt);
+            return Map.of(
+                "answer", answer,
+                "sources", sources
+            );
+        } catch (Exception e) {
+            return Map.of(
+                "answer", "AI 답변 생성 중 오류: " + e.getMessage(),
+                "sources", sources
+            );
         }
     }
 
@@ -245,16 +401,14 @@ public class RagService {
      */
     public void clearStore() {
         try {
-            // 벡터 저장소 초기화 시도
-            // Spring AI 2.0.0-M2에서는 직접적인 clear() 메서드가 없어 
-            // 초기화 상태만 변경하고 로그 출력
+            // 초기화 상태 변경
             isInitialized = false;
             
-            // 실제 벡터 저장소 데이터는 현재 API에서 직접 삭제 불가
-            // 추후 API 업데이트 시 clear() 메서드 사용 가능
-            System.out.println("벡터 저장소가 초기화되었습니다.");
-            System.out.println("참고: 현재 Spring AI 버전에서는 벡터 데이터 직접 삭제가 제한됩니다.");
-            System.out.println("애플리케이션 재시작 시 Redis 데이터가 다시 로드되지 않도록 하려면 Redis 데이터도 삭제해주세요.");
+            // Redis에 저장된 문서도 삭제하여 깨끗한 상태로 만듦
+            clearAllRedisDocuments();
+            
+            System.out.println("벡터 저장소와 Redis 문서가 초기화되었습니다.");
+            System.out.println("다음 문서 로드 시 새로운 벡터 데이터가 생성됩니다.");
             
         } catch (Exception e) {
             System.err.println("벡터 저장소 초기화 실패: " + e.getMessage());
@@ -454,12 +608,38 @@ public class RagService {
             }
             
             if (!documents.isEmpty()) {
-                // 문서를 작은 조각으로 분할
-                TokenTextSplitter textSplitter = new TokenTextSplitter();
-                List<Document> splitDocuments = textSplitter.apply(documents);
+            List<Document> allSplitDocuments = new ArrayList<>();
+            int globalChunkIndex = 0;
+            TokenTextSplitter textSplitter = new TokenTextSplitter();
+            
+            // 각 파일별로 문서 분할 처리
+            for (Document originalDoc : documents) {
+                System.out.println("Redis 파일 분할 시작: " + originalDoc.getMetadata().get("filename"));
+                System.out.println("원본 내용 길이: " + originalDoc.getText().length());
                 
-                // 벡터 저장소에 추가
-                vectorStore.add(splitDocuments);
+                // 개별 문서 분할
+                List<Document> singleDocList = new ArrayList<>();
+                singleDocList.add(originalDoc);
+                List<Document> splitDocuments = textSplitter.apply(singleDocList);
+                
+                // 각 분할된 문서 조각에 고유 ID 추가
+                for (int i = 0; i < splitDocuments.size(); i++) {
+                    Document doc = splitDocuments.get(i);
+                    Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
+                    metadata.put("chunk_id", globalChunkIndex);
+                    metadata.put("chunk_index", i);
+                    metadata.put("file_chunk_index", i);
+                    
+                    // 새로운 Document 객체 생성 (metadata 업데이트)
+                    Document updatedDoc = new Document(doc.getText(), metadata);
+                    allSplitDocuments.add(updatedDoc);
+                    
+                    globalChunkIndex++;
+                }
+            }
+            
+            // 벡터 저장소에 추가
+            vectorStore.add(allSplitDocuments);
                 
                 isInitialized = true;
                 System.out.println("Redis에서 " + documents.size() + "개 문서를 벡터 저장소에 로드했습니다.");

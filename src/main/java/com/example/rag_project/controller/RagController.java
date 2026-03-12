@@ -2,10 +2,14 @@ package com.example.rag_project.controller;
 
 import com.example.rag_project.dto.RagRequest;
 import com.example.rag_project.dto.RagResponse;
+import com.example.rag_project.dto.SourceInfo;
 import com.example.rag_project.service.RagService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/rag")
@@ -27,8 +31,13 @@ public class RagController {
     @PostMapping("/ask")
     public ResponseEntity<RagResponse> query(@RequestBody RagRequest request) {
         try {
-            String answer = ragService.searchAndAnswer(request.getQuery());
-            return ResponseEntity.ok(RagResponse.success(answer));
+            // 항상 출처 정보 포함
+            Map<String, Object> result = ragService.searchAndAnswerWithSources(request.getQuery());
+            String answer = (String) result.get("answer");
+            @SuppressWarnings("unchecked")
+            List<SourceInfo> sources = (List<SourceInfo>) result.get("sources");
+            
+            return ResponseEntity.ok(RagResponse.success(answer, null, sources));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("질의응답 실패: " + e.getMessage()));
         }
@@ -73,6 +82,18 @@ public class RagController {
             return ResponseEntity.ok(RagResponse.success("벡터 저장소가 초기화되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("벡터 저장소 초기화 실패: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reload")
+    public ResponseEntity<RagResponse> reloadDocuments() {
+        try {
+            // 벡터 저장소 초기화 후 다시 로드
+            ragService.clearStore();
+            ragService.initializeDocuments();
+            return ResponseEntity.ok(RagResponse.success("문서가 다시 로드되었습니다."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(RagResponse.error("문서 재로드 실패: " + e.getMessage()));
         }
     }
 }

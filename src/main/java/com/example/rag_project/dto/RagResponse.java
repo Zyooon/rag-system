@@ -1,6 +1,7 @@
 package com.example.rag_project.dto;
 
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class RagResponse {
@@ -8,6 +9,7 @@ public class RagResponse {
     private boolean success;
     private String message;
     private Object data;
+    private List<SourceInfo> sources;
     
     public static RagResponse success(String answer) {
         RagResponse response = new RagResponse();
@@ -21,6 +23,15 @@ public class RagResponse {
         response.setSuccess(true);
         response.setAnswer(answer);
         response.setData(data);
+        return response;
+    }
+    
+    public static RagResponse success(String answer, Object data, List<SourceInfo> sources) {
+        RagResponse response = new RagResponse();
+        response.setSuccess(true);
+        response.setAnswer(answer);
+        response.setData(data);
+        response.setSources(sources);
         return response;
     }
     
