@@ -33,12 +33,12 @@ public class RagConfig {
     // Ollama 임베딩 모델 설정
     @Bean
     public EmbeddingModel embeddingModel(OllamaApi ollamaApi) {
-        // OllamaOptions 대신 OllamaEmbeddingOptions를 사용합니다.
+        // application.yml과 일치하는 임베딩 모델 사용
         return OllamaEmbeddingModel.builder()
                 .ollamaApi(ollamaApi)
                 .defaultOptions(
                         OllamaEmbeddingOptions.builder()
-                                .model("llama3")
+                                .model("bge-m3") // 한국어 검색 성능이 뛰어난 모델로 일치
                                 .build()
                 )
                 .build();
