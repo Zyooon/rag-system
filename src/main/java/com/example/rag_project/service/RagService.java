@@ -599,21 +599,32 @@ public class RagService {
                 Map<String, Object> metadata = doc.getMetadata();
                 String h1 = metadata.getOrDefault("h1", "").toString();
                 
-                // 파일명에서 기본 문서 제목 추출
+                // 동적으로 문서 제목 추출 (하드코딩 제거)
                 String filename = source.getFilename();
                 String baseTitle = "";
-                if (filename.equals("sample-doc.txt")) {
-                    baseTitle = "세상의 모든 이상한 것들 사전";
-                } else if (filename.equals("sample-doc2.txt")) {
-                    baseTitle = "세상의 모든 이상한 것들 사전: 제2권";
-                } else if (filename.equals("sample-markdown.txt")) {
-                    baseTitle = "이상한 생물 및 장소 도감";
-                } else if (filename.equals("sample-table.txt")) {
-                    baseTitle = "이상한 물건 목록";
-                } else if (filename.equals("sample-free.txt")) {
-                    baseTitle = "내가 경험한 이상한 나라의 기록들";
-                } else {
+                
+                // 문서 내용에서 제목 동적 추출 시도
+                try {
+                    // 파일 경로에서 실제 문서 내용 읽어서 제목 추출
+                    String filepath = metadata.getOrDefault("filepath", "").toString();
+                    
+                    if (!filepath.isEmpty()) {
+                        String content = Files.readString(Paths.get(filepath));
+                        HierarchicalParser parser = new HierarchicalParser();
+                        baseTitle = parser.extractDocumentTitle(content);
+                    } else {
+                        // 파일 경로가 없으면 파일명에서 제목 생성
+                        baseTitle = filename.replace(".txt", "").replace(".md", "");
+                        if (baseTitle.isEmpty()) {
+                            baseTitle = "제목 없음";
+                        }
+                    }
+                } catch (Exception e) {
+                    // 오류 발생 시 파일명에서 제목 생성
                     baseTitle = filename.replace(".txt", "").replace(".md", "");
+                    if (baseTitle.isEmpty()) {
+                        baseTitle = "제목 없음";
+                    }
                 }
                 
                 // 계층적 정보로 출처 정보 생성
