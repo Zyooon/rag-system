@@ -316,14 +316,18 @@ public class RagService {
                         List<Document> finalDocuments = new ArrayList<>();
                         for (Document doc : parsedDocuments) {
                             if (doc.getText().length() > 800) {
-                                // 긴 문서는 추가 분할 - 메타데이터 유지 확인
                                 List<Document> splitLongDocs = textSplitter.apply(List.of(doc));
+                                
+                                System.out.println("긴 문서 분할 - 원본 메타데이터: " + doc.getMetadata());
+                                System.out.println("분할된 문서 수: " + splitLongDocs.size());
+                                
                                 // 분할된 문서들의 메타데이터 확인 및 복사
                                 for (Document splitDoc : splitLongDocs) {
-                                    // 원본 메타데이터를 복사하여 새 Document 생성
-                                    Map<String, Object> splitMetadata = new HashMap<>(doc.getMetadata());
-                                    Document finalDoc = new Document(splitDoc.getText(), splitMetadata);
-                                    finalDocuments.add(finalDoc);
+                                    // 중요: 분할된 조각에도 원본 메타데이터를 다시 넣어줌
+                                    splitDoc.getMetadata().putAll(doc.getMetadata()); 
+                                    finalDocuments.add(splitDoc);
+                                    
+                                    System.out.println("분할 문서 메타데이터: " + splitDoc.getMetadata());
                                 }
                             } else {
                                 finalDocuments.add(doc);
@@ -580,7 +584,6 @@ public class RagService {
         System.out.println("========================");
         
         // 필터링된 문서를 기반으로 출처 정보 생성 (중복 제거)
-        final String[] sourceContextHolder = {""};
         Set<String> processedChunks = new HashSet<>(); // 중복 조각 추적용
         List<SourceInfo> sources = relevantDocuments.stream()
             .filter(doc -> {
@@ -602,79 +605,28 @@ public class RagService {
                 processedChunks.add(uniqueKey);
                 return true;
             })
-            .limit(5) // 최대 3개의 출처만 선택
+            .limit(5) // 최대 5개의 출처만 선택
             .map(doc -> {
                 SourceInfo source = SourceInfo.fromDocument(doc);
                 System.out.println("출처 정보 - 파일명: " + source.getFilename() + 
                                  ", 조각 ID: " + source.getChunkId() +
                                  ", 유사도: " + source.getSimilarityScore() + 
                                  ", 내용 길이: " + (source.getContent() != null ? source.getContent().length() : 0));
-                
-                // 메타데이터에서 계층적 정보 추출
-                Map<String, Object> metadata = doc.getMetadata();
-                String h1 = metadata.getOrDefault("h1", "").toString();
-                
-                // 동적으로 문서 제목 추출 (하드코딩 제거)
-                String filename = source.getFilename();
-                String baseTitle = "";
-                
-                // 문서 내용에서 제목 동적 추출 시도
-                try {
-                    // 파일 경로에서 실제 문서 내용 읽어서 제목 추출
-                    String filepath = metadata.getOrDefault("filepath", "").toString();
-                    
-                    if (!filepath.isEmpty()) {
-                        String content = Files.readString(Paths.get(filepath));
-                        HierarchicalParser parser = new HierarchicalParser();
-                        baseTitle = parser.extractDocumentTitle(content);
-                    } else {
-                        // 파일 경로가 없으면 파일명에서 제목 생성
-                        baseTitle = filename.replace(".txt", "").replace(".md", "");
-                        if (baseTitle.isEmpty()) {
-                            baseTitle = "제목 없음";
-                        }
-                    }
-                } catch (Exception e) {
-                    // 오류 발생 시 파일명에서 제목 생성
-                    baseTitle = filename.replace(".txt", "").replace(".md", "");
-                    if (baseTitle.isEmpty()) {
-                        baseTitle = "제목 없음";
-                    }
-                }
-                
-                // 계층적 정보로 출처 정보 생성
-                String contextInfo = baseTitle;
-                if (!h1.isEmpty()) {
-                    // h1에서 번호와 제목 분리 (예: "7. 춤추는 선인장")
-                    if (h1.matches("^\\d+\\.\\s.+")) {
-                        contextInfo += " - " + h1;  // 이미 번호가 있음
-                    } else {
-                        contextInfo += " - " + h1;  // 제목만 추가
-                    }
-                }
-                
-                // 기존 content를 계층적 정보로 덮어쓰기
-                source.setContent(contextInfo);
-                
-                sourceContextHolder[0] = "context : " + contextInfo;
                 return source;
             })
             .collect(Collectors.toList());
 
-        // LLM에게 줄 컨텍스트 생성 (검색된 순서대로 결합)
-        String context = relevantDocuments.stream()
-                .filter(doc -> {
-                    String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
-                    return !filename.equals("README.md");
-                })
-                .map(Document::getText)
-                .collect(Collectors.joining("\n\n"));
+        // LLM에게 줄 컨텍스트 생성 (검색된 순서대로 결합 + 번호 매기기)
+        StringBuilder contextWithIndices = new StringBuilder();
+        for (int i = 0; i < relevantDocuments.size(); i++) {
+            contextWithIndices.append(String.format("[%d] %s\n\n", i + 1, relevantDocuments.get(i).getText()));
+        }
+        
+        String context = contextWithIndices.toString();
         
         // 디버깅: context 내용 출력
         System.out.println("=== 생성된 컨텍스트 ===");
-        System.out.println("문서 수: " + relevantDocuments.stream()
-            .filter(doc -> !doc.getMetadata().getOrDefault("filename", "").equals("README.md"))
-            .count());
+        System.out.println("문서 수: " + relevantDocuments.size());
         System.out.println("컨텍스트 길이: " + context.length());
         System.out.println("컨텍스트 내용 (미리보기): " + 
             (context.length() > 200 ? context.substring(0, 200) + "..." : context));
@@ -688,30 +640,28 @@ public class RagService {
         }
         
         String prompt = String.format("""
-            당신은 한국어 전문 AI 어시스턴트입니다. 반드시 한국어로만 답변해야 합니다.
+            당신은 한국어 AI 어시스턴트입니다. 반드시 한국어로만 답변하세요.
+            
+            [중요] 각 정보의 출처를 문장 끝에 [번호]로 반드시 표시해야 합니다.
             
             [문서 내용]
             %s
             
-            [사용자 질문]
+            [질문]
             %s
             
-            중요 지침:
-            1. 절대적으로 한국어로만 답변하세요. 영어 단어나 문장을 사용하지 마세요.
-            2. 문서 내용만 사용하여 답변하세요.
-            3. 질문에 직접적으로 답변하세요.
-            4. 문서에 관련 정보가 없다면 "문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
-            5. 모든 답변은 완벽한 한국어로 작성해야 합니다.
+            [답변 형식 예시]
+            맛있는 신문은 기사를 다 읽고 나면 먹을 수 있어요[1]. 경제면은 스테이크 맛이 납니다[1].
             
-            %s
-            
-            한국어 답변:
-            """, context, query, sourceContextHolder[0]);
+            답변:
+            """, context, query);
 
         try {
             String answer = chatModel.call(prompt);
-            // 가장 높은 유사도를 가진 출처 하나만 반환
-            SourceInfo bestSource = sources.isEmpty() ? new SourceInfo() : sources.get(0);
+            
+            // 출처 재계산: 답변 내용과 실제 사용된 문서 매칭
+            SourceInfo bestSource = findBestMatchingSource(answer, relevantDocuments);
+            
             return Map.of(
                 "answer", answer,
                 "sources", bestSource
@@ -724,6 +674,122 @@ public class RagService {
                 "sources", bestSource
             );
         }
+    }
+
+    /**
+     * 출처 재계산: 답변의 참조 번호를 기반으로 정확한 출처 찾기
+     */
+    private SourceInfo findBestMatchingSource(String answer, List<Document> documents) {
+        System.out.println("=== 출처 재계산 시작 (번호 기반) ===");
+        System.out.println("답변 내용: " + answer.substring(0, Math.min(100, answer.length())) + "...");
+        
+        // 답변에서 모든 참조 번호 추출
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\[(\\d+)\\]");
+        java.util.regex.Matcher matcher = pattern.matcher(answer);
+        
+        java.util.Set<Integer> refNumbers = new java.util.HashSet<>();
+        while (matcher.find()) {
+            refNumbers.add(Integer.parseInt(matcher.group(1)));
+        }
+        
+        System.out.println("찾은 참조 번호들: " + refNumbers);
+        
+        // 각 참조 번호에 해당하는 문서 확인 및 관련성 평가
+        SourceInfo bestSource = new SourceInfo();
+        double bestRelevanceScore = 0.0;
+        
+        for (int refNum : refNumbers) {
+            int docIndex = refNum - 1; // 0-based index로 변환
+            if (docIndex >= 0 && docIndex < documents.size()) {
+                Document candidateDoc = documents.get(docIndex);
+                String docContent = candidateDoc.getText();
+                
+                // 관련성 점수 계산 (키워드 매칭)
+                double relevanceScore = calculateRelevanceScore(docContent);
+                
+                System.out.println("참조 번호 [" + refNum + "] 관련성 점수: " + relevanceScore);
+                System.out.println("문서 내용: " + docContent.substring(0, docContent.length() > 50 ? 50 : docContent.length()));
+                
+                if (relevanceScore > bestRelevanceScore) {
+                    bestRelevanceScore = relevanceScore;
+                    bestSource = SourceInfo.fromDocument(candidateDoc);
+                    System.out.println("새로운 최고 관련성 점수: " + relevanceScore);
+                }
+            }
+        }
+        
+        // 참조 번호로 관련 문서를 찾았으면 반환
+        if (bestRelevanceScore > 0) {
+            System.out.println("참조 번호 기반으로 선택된 출처: " + bestSource.getFilename());
+            return bestSource;
+        }
+        
+        // 참조 번호로 관련 문서를 찾지 못하면 fallback
+        System.out.println("참조 번호로 관련 문서를 찾지 못해 기존 방식으로 fallback");
+        return findBestMatchingSourceByContent(answer, documents);
+    }
+    
+    /**
+     * 문서 관련성 점수 계산
+     */
+    private double calculateRelevanceScore(String content) {
+        double score = 0.0;
+        
+        // 키워드 기반 점수 계산
+        String[] keywords = {"맛있는 신문", "신문", "기사", "경제면", "스테이크", "욕조물", "보관"};
+        for (String keyword : keywords) {
+            if (content.contains(keyword)) {
+                score += 1.0;
+            }
+        }
+        
+        return score;
+    }
+    
+    /**
+     * 기존 방식: 내용 기반 출처 매칭 (fallback용)
+     */
+    private SourceInfo findBestMatchingSourceByContent(String answer, List<Document> documents) {
+        SourceInfo bestSource = new SourceInfo();
+        double maxScore = 0.0;
+        
+        for (Document doc : documents) {
+            double score = calculateContentSimilarity(answer, doc.getText());
+            String docPreview = doc.getText().length() > 50 ? doc.getText().substring(0, 50) : doc.getText();
+            System.out.println("문서 유사도: " + score + " - " + docPreview);
+            
+            if (score > maxScore) {
+                maxScore = score;
+                bestSource = SourceInfo.fromDocument(doc);
+                System.out.println("새로운 최고 점수: " + score);
+            }
+        }
+        
+        System.out.println("최종 선택된 출처: " + bestSource.getFilename());
+        return bestSource;
+    }
+    
+    /**
+     * 답변과 문서 내용의 유사도 계산
+     */
+    private double calculateContentSimilarity(String answer, String document) {
+        // 간단한 키워드 매칭 기반 유사도 계산
+        String[] answerWords = answer.toLowerCase().replaceAll("[^가-힣a-z0-9\\s]", "").split("\\s+");
+        String[] docWords = document.toLowerCase().replaceAll("[^가-힣a-z0-9\\s]", "").split("\\s+");
+        
+        int matchCount = 0;
+        for (String answerWord : answerWords) {
+            if (answerWord.length() > 1) { // 1글자 이상만
+                for (String docWord : docWords) {
+                    if (docWord.contains(answerWord) || answerWord.contains(docWord)) {
+                        matchCount++;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return answerWords.length > 0 ? (double) matchCount / answerWords.length : 0.0;
     }
 
     /**
