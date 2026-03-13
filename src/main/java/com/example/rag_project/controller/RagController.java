@@ -78,4 +78,24 @@ public class RagController {
             return ResponseEntity.badRequest().body(RagResponse.error("문서 재로드 실패: " + e.getMessage()));
         }
     }
+
+    // 예외 처리 테스트 엔드포인트
+    @GetMapping("/test/exception")
+    public ResponseEntity<RagResponse> testException() {
+        // 일반 예외 발생 테스트
+        throw new RuntimeException("테스트용 런타임 예외 발생!");
+    }
+
+    @GetMapping("/test/illegal-argument")
+    public ResponseEntity<RagResponse> testIllegalArgumentException() {
+        // IllegalArgumentException 발생 테스트
+        throw new IllegalArgumentException("잘못된 인자가 전달되었습니다: 테스트용 예외");
+    }
+
+    @GetMapping("/test/null-pointer")
+    public ResponseEntity<RagResponse> testNullPointerException() {
+        // NullPointerException 발생 테스트
+        String nullString = null;
+        return ResponseEntity.ok(RagResponse.success("길이: " + nullString.length()));
+    }
 }
