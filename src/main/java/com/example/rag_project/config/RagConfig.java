@@ -7,15 +7,17 @@ import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
+import redis.clients.jedis.JedisPooled;
 
 @Configuration
 public class RagConfig {
@@ -45,11 +47,31 @@ public class RagConfig {
                 .build();
     }
 
-    // 벡터 저장소 설정 (임시: SimpleVectorStore 사용 + Redis 백업)
+    // 벡터 저장소 설정 (RedisVectorStore 사용)
     @Bean
-    public VectorStore vectorStore(EmbeddingModel embeddingModel) {
-        System.out.println("Simple 벡터 저장소를 사용합니다 (Redis 백업 포함).");
-        return SimpleVectorStore.builder(embeddingModel).build();
+    public VectorStore vectorStore(EmbeddingModel embeddingModel, JedisConnectionFactory jedisConnectionFactory) {
+        System.out.println("Redis VectorStore를 사용합니다.");
+        JedisPooled jedisPooled = new JedisPooled(jedisConnectionFactory.getHostName(), 
+                                                jedisConnectionFactory.getPort());
+        return RedisVectorStore.builder(jedisPooled, embeddingModel)
+                .initializeSchema(true)
+                .build();
+    }
+
+    // JedisConnectionFactory 설정 (RedisVectorStore용)
+    @Bean
+    public JedisConnectionFactory jedisConnectionFactory() {
+        RedisStandaloneConfiguration config = 
+            new RedisStandaloneConfiguration();
+        config.setHostName("localhost");
+        config.setPort(6379);
+        // config.setPassword("1234"); // Redis Stack Server는 비밀번호 없음
+        config.setDatabase(0);
+        
+        JedisConnectionFactory factory = 
+            new JedisConnectionFactory(config);
+        factory.afterPropertiesSet();
+        return factory;
     }
 
     // RedisTemplate 설정 (문서 저장용)

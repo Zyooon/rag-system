@@ -706,22 +706,42 @@ public class RagService {
             // 초기화 상태 변경
             isInitialized = false;
             
-            // Redis 벡터 저장소 초기화 (파일이 없으므로 주석 처리)
+            // Redis 벡터 데이터 직접 삭제
             try {
-                String currentDir = System.getProperty("user.dir");
-                Path vectorStoreFile = Paths.get(currentDir, "vectorstore.json");
-                if (Files.exists(vectorStoreFile)) {
-                    Files.delete(vectorStoreFile);
-                    System.out.println("벡터 저장소 파일을 삭제했습니다: " + vectorStoreFile);
+                redis.clients.jedis.Jedis jedis = new redis.clients.jedis.Jedis("localhost", 6379);
+                
+                // 1. 벡터 인덱스 삭제 (있는 경우만)
+                try {
+                    Object result = jedis.sendCommand(
+                        redis.clients.jedis.Protocol.Command.valueOf("FT.DROPINDEX"),
+                        "vector_index".getBytes(), "DD".getBytes());
+                    System.out.println("벡터 인덱스 삭제 완료: " + result);
+                } catch (Exception e) {
+                    System.out.println("벡터 인덱스 삭제 실패 (이미 없거나 오류): " + e.getMessage());
                 }
+                
+                // 2. 모든 벡터 관련 키 삭제
+                java.util.Set<String> ragKeys = jedis.keys("rag:*");
+                if (!ragKeys.isEmpty()) {
+                    jedis.del(ragKeys.toArray(new String[0]));
+                    System.out.println("RAG 관련 키 " + ragKeys.size() + "개 삭제 완료");
+                }
+                
+                // 3. 모든 embedding 키 삭제
+                java.util.Set<String> embeddingKeys = jedis.keys("embedding:*");
+                if (!embeddingKeys.isEmpty()) {
+                    jedis.del(embeddingKeys.toArray(new String[0]));
+                    System.out.println("Embedding 관련 키 " + embeddingKeys.size() + "개 삭제 완료");
+                }
+                
+                jedis.close();
+                System.out.println("Redis 벡터 데이터가 삭제되었습니다.");
+                
             } catch (Exception e) {
-                System.out.println("벡터 저장소 파일 삭제 실패: " + e.getMessage());
+                System.err.println("Redis 벡터 데이터 삭제 실패: " + e.getMessage());
             }
             
-            // Redis에 저장된 문서도 삭제하여 깨끗한 상태로 만듦
-            clearAllRedisDocuments();
-            
-            System.out.println("벡터 저장소와 Redis 문서가 초기화되었습니다.");
+            System.out.println("Redis Vector Store가 초기화되었습니다.");
             System.out.println("다음 문서 로드 시 새로운 벡터 데이터가 생성됩니다.");
             
         } catch (Exception e) {
@@ -890,39 +910,7 @@ public class RagService {
         return documents;
     }
 
-    /**
-     * Redis에 저장된 모든 문서를 삭제하는 메서드
-     * @return 삭제된 문서 수
-     */
-    public int clearAllRedisDocuments() {
-        try {
-            java.util.Set<String> keys = redisTemplate.keys("rag:document:*");
-            if (keys.isEmpty()) {
-                System.out.println("Redis에 저장된 문서가 없습니다.");
-                return 0;
-            }
-            
-            redisTemplate.delete(keys);
-            System.out.println("Redis에서 " + keys.size() + "개의 문서를 삭제했습니다.");
-            return keys.size();
-        } catch (Exception e) {
-            System.err.println("Redis 문서 삭제 실패: " + e.getMessage());
-            return 0;
-        }
-    }
-    public boolean testRedisConnection() {
-        try {
-            redisTemplate.opsForValue().set("test:connection", "Redis 연결 테스트 성공!");
-            String result = (String) redisTemplate.opsForValue().get("test:connection");
-            redisTemplate.delete("test:connection");
-            
-            System.out.println("Redis 연결 테스트 성공: " + result);
-            return true;
-        } catch (Exception e) {
-            System.err.println("Redis 연결 테스트 실패: " + e.getMessage());
-            return false;
-        }
-    }
+    // Redis 관련 기능은 RedisVectorStore가 직접 처리하므로 제거됨
 
     /**
      * Redis에 저장된 문서들을 벡터 저장소에 로드하는 메서드

@@ -47,10 +47,9 @@ public class RagController {
     @DeleteMapping("/storage")
     public ResponseEntity<RagResponse> clearRedisVectorStore() {
         try {
-            // Redis 인덱스와 모든 벡터 데이터 삭제
+            // Redis 벡터 저장소 초기화 (RedisVectorStore가 직접 처리)
             ragService.clearStore();
-            int deletedCount = ragService.clearAllRedisDocuments();
-            return ResponseEntity.ok(RagResponse.success("Redis 인덱스와 벡터 데이터 삭제 완료: " + deletedCount + "개"));
+            return ResponseEntity.ok(RagResponse.success("Redis Vector Store 삭제 완료"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("Redis Vector Store 삭제 실패: " + e.getMessage()));
         }

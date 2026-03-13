@@ -22,7 +22,7 @@ spring:
     redis:
       host: localhost
       port: 6379
-      password: 1234
+      # password: 1234  # Redis Stack Server는 비밀번호 없음
       timeout: 2000ms
       lettuce:
         pool:
@@ -38,7 +38,7 @@ rag:
     threshold: 0.3
     max-results: 5
   vectorstore:
-    type: simple  # 임시: RedisVectorStore 호환 문제로 SimpleVectorStore 사용
+    type: redis  # RedisVectorStore 사용
 
 server:
   port: 8080
