@@ -12,6 +12,8 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import com.example.rag_project.dto.SourceInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,6 +31,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class RagService {
+
+    private static final Logger logger = LoggerFactory.getLogger(RagService.class);
 
     /**
      * 문서의 구조를 분석하고 계층적 정보를 추출하는 파서
@@ -262,10 +266,10 @@ public class RagService {
             folder = Paths.get(currentDir, folderPath);
         }
         
-        System.out.println("문서 폴더 경로: " + folder.toAbsolutePath());
+        logger.info("문서 폴더 경로: {}", folder.toAbsolutePath());
         
         if (!Files.exists(folder) || !Files.isDirectory(folder)) {
-            System.out.println("폴더가 존재하지 않습니다. 기본 경로로 시도합니다...");
+            logger.info("폴더가 존재하지 않습니다. 기본 경로로 시도합니다...");
             
             // 기본 폴더 시도
             String currentDir = System.getProperty("user.dir");
@@ -274,12 +278,12 @@ public class RagService {
             if (!Files.exists(folder)) {
                 // 폴더 생성 시도
                 Files.createDirectories(folder);
-                System.out.println("문서 폴더를 생성했습니다: " + folder.toAbsolutePath());
+                logger.info("문서 폴더를 생성했습니다: {}", folder.toAbsolutePath());
             } else {
-                System.out.println("기본 폴더를 찾았습니다: " + folder.toAbsolutePath());
+                logger.info("기본 폴더를 찾았습니다: {}", folder.toAbsolutePath());
             }
         } else {
-            System.out.println("폴더를 찾았습니다: " + folder.toAbsolutePath());
+            logger.info("폴더를 찾았습니다: {}", folder.toAbsolutePath());
         }
 
         List<Document> allDocuments = new ArrayList<>();
@@ -292,14 +296,14 @@ public class RagService {
                 .filter(path -> {
                     String fileName = path.getFileName().toString().toLowerCase();
                     boolean isValid = fileName.endsWith(".txt") || fileName.endsWith(".md");
-                    System.out.println("파일 필터링: " + fileName + " -> " + (isValid ? "처리" : "건너뛰기"));
+                    logger.info("파일 필터링: {} -> {}", fileName, isValid ? "처리" : "건너뛰기");
                     return isValid;
                 })
                 .forEach(path -> {
                     try {
-                        System.out.println("처리 시작: " + path.getFileName());
+                        logger.info("처리 시작: {}", path.getFileName());
                         String content = Files.readString(path);
-                        System.out.println("파일 내용 길이: " + content.length() + "자");
+                        logger.info("파일 내용 길이: {}자", content.length());
                         
                         String filename = path.getFileName().toString();
                         
@@ -318,8 +322,8 @@ public class RagService {
                             if (doc.getText().length() > 800) {
                                 List<Document> splitLongDocs = textSplitter.apply(List.of(doc));
                                 
-                                System.out.println("긴 문서 분할 - 원본 메타데이터: " + doc.getMetadata());
-                                System.out.println("분할된 문서 수: " + splitLongDocs.size());
+                                logger.info("긴 문서 분할 - 원본 메타데이터: {}", doc.getMetadata());
+                                logger.info("분할된 문서 수: {}", splitLongDocs.size());
                                 
                                 // 분할된 문서들의 메타데이터 확인 및 복사
                                 for (Document splitDoc : splitLongDocs) {
@@ -327,7 +331,7 @@ public class RagService {
                                     splitDoc.getMetadata().putAll(doc.getMetadata()); 
                                     finalDocuments.add(splitDoc);
                                     
-                                    System.out.println("분할 문서 메타데이터: " + splitDoc.getMetadata());
+                                    logger.info("분할 문서 메타데이터: {}", splitDoc.getMetadata());
                                 }
                             } else {
                                 finalDocuments.add(doc);
@@ -336,18 +340,17 @@ public class RagService {
                         
                         allDocuments.addAll(finalDocuments);
                         
-                        System.out.println("파일 로드 완료: " + path.getFileName() + 
-                                         " (생성된 조각: " + finalDocuments.size() + "개)");
+                        logger.info("파일 로드 완료: {} (생성된 조각: {}개)", path.getFileName(), finalDocuments.size());
                     } catch (IOException e) {
-                        System.err.println("파일 로드 실패: " + path + " - " + e.getMessage());
+                        logger.error("파일 로드 실패: {} - {}", path, e.getMessage());
                         e.printStackTrace();
                     } catch (Exception e) {
-                        System.err.println("파일 파싱 실패: " + path + " - " + e.getMessage());
+                        logger.error("파일 파싱 실패: {} - {}", path, e.getMessage());
                         e.printStackTrace();
                     }
                 });
         } catch (IOException e) {
-            System.err.println("폴더 스캔 실패: " + e.getMessage());
+            logger.error("폴더 스캔 실패: {}", e.getMessage());
             throw e;
         }
 
@@ -360,7 +363,7 @@ public class RagService {
                 String filename = originalDoc.getMetadata().getOrDefault("filename", "알수없음").toString();
                 
                 // 메타데이터 디버깅
-                System.out.println("문서 처리 중 - 파일명: " + filename + ", 메타데이터: " + originalDoc.getMetadata());
+                logger.info("문서 처리 중 - 파일명: {}, 메타데이터: {}", filename, originalDoc.getMetadata());
                 
                 // 고유 ID 부여
                 Map<String, Object> metadata = new HashMap<>(originalDoc.getMetadata());
@@ -369,7 +372,7 @@ public class RagService {
                 metadata.put("file_chunk_index", globalChunkIndex);
                 
                 Document finalDoc = new Document(originalDoc.getText(), metadata);
-                System.out.println("최종 문서 생성 - 파일명: " + finalDoc.getMetadata().get("filename"));
+                logger.info("최종 문서 생성 - 파일명: {}", finalDoc.getMetadata().get("filename"));
                 
                 finalDocuments.add(finalDoc);
                 globalChunkIndex++;
@@ -379,10 +382,10 @@ public class RagService {
             vectorStore.add(finalDocuments);
             
             isInitialized = true;
-            System.out.println("총 " + allDocuments.size() + "개의 구조화된 조각이 생성되어 벡터 저장소에 로드되었습니다.");
+            logger.info("총 {}개의 구조화된 조각이 생성되어 벡터 저장소에 로드되었습니다.", allDocuments.size());
         } else {
-            System.out.println("폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
-            System.out.println("이 폴더에 .txt 파일을 추가해주세요.");
+            logger.info("폴더에 텍스트 파일이 없습니다: {}", folder.toAbsolutePath());
+            logger.info("이 폴더에 .txt 파일을 추가해주세요.");
         }
     }
 
@@ -395,7 +398,7 @@ public class RagService {
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         
         try {
-            System.out.println("=== 파일에서 Redis로 데이터 로드 시작 ===");
+            logger.info("=== 파일에서 Redis로 데이터 로드 시작 ===");
             
             // 기존 Redis 데이터 정리
             clearStore();
@@ -403,7 +406,7 @@ public class RagService {
             // 프로젝트 루트 기준의 문서들만 로드
             String currentDir = System.getProperty("user.dir");
             String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
-            System.out.println("문서 경로: " + projectDocumentsPath);
+            logger.info("문서 경로: {}", projectDocumentsPath);
             
             // 기존 loadDocumentsFromFolder 메서드 사용 (RedisVectorStore로 자동 저장됨)
             loadDocumentsFromFolder(projectDocumentsPath);
@@ -413,11 +416,11 @@ public class RagService {
             result.put("documentCount", getAllRedisDocumentKeys().size());
             
         } catch (IOException e) {
-            System.err.println("파일에서 Redis로 데이터 로드 실패: " + e.getMessage());
+            logger.error("파일에서 Redis로 데이터 로드 실패: {}", e.getMessage());
             result.put("success", false);
             result.put("message", "로드 실패: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("예상치 못한 오류: " + e.getMessage());
+            logger.error("예상치 못한 오류: {}", e.getMessage());
             result.put("success", false);
             result.put("message", "오류 발생: " + e.getMessage());
         }
@@ -431,7 +434,7 @@ public class RagService {
      */
     public void initializeDocuments() {
         try {
-            System.out.println("=== Redis 벡터 저장소 상태 확인 ===");
+            logger.info("=== Redis 벡터 저장소 상태 확인 ===");
             
             // Redis 벡터 저장소 상태 확인
             java.util.List<String> redisKeys = getAllRedisDocumentKeys();
@@ -439,16 +442,16 @@ public class RagService {
             
             if (documentCount > 0) {
                 isInitialized = true;
-                System.out.println("Redis 벡터 저장소에 " + documentCount + "개의 문서가 있습니다.");
-                System.out.println("시스템이 준비되었습니다.");
+                logger.info("Redis 벡터 저장소에 {}개의 문서가 있습니다.", documentCount);
+                logger.info("시스템이 준비되었습니다.");
             } else {
                 isInitialized = false;
-                System.out.println("Redis 벡터 저장소에 데이터가 없습니다.");
-                System.out.println("수동으로 데이터를 로드해주세요 (/load-from-files API 호출).");
+                logger.info("Redis 벡터 저장소에 데이터가 없습니다.");
+                logger.info("수동으로 데이터를 로드해주세요 (/load-from-files API 호출).");
             }
             
         } catch (Exception e) {
-            System.err.println("Redis 벡터 저장소 상태 확인 실패: " + e.getMessage());
+            logger.error("Redis 벡터 저장소 상태 확인 실패: {}", e.getMessage());
             isInitialized = false;
         }
     }
@@ -535,7 +538,7 @@ public class RagService {
             initializeDocuments();
         }
 
-        System.out.println("=== 검색 요청: " + query + " ===");
+        logger.info("=== 검색 요청: {} ===", query);
         
         // 유사도 검색 (기본 검색 후 개수 제한)
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
@@ -558,7 +561,7 @@ public class RagService {
             .limit(maxSearchResults) // 설정된 최대 결과 개수로 제한
             .collect(Collectors.toList());
         
-        System.out.println("찾은 문서 수: " + relevantDocuments.size());
+        logger.info("찾은 문서 수: {}", relevantDocuments.size());
         
         // 검색 결과가 없을 경우 예외 처리
         if (relevantDocuments.isEmpty()) {
@@ -569,7 +572,7 @@ public class RagService {
         }
 
         // 디버깅: 각 문서의 유사도와 내용 출력
-        System.out.println("=== 검색된 문서 상세 정보 ===");
+        logger.info("=== 검색된 문서 상세 정보 ===");
         for (int i = 0; i < relevantDocuments.size(); i++) {
             Document doc = relevantDocuments.get(i);
             String filename = doc.getMetadata().getOrDefault("filename", "알수없음").toString();
@@ -577,11 +580,11 @@ public class RagService {
             String chunkId = doc.getMetadata().getOrDefault("chunk_id", "없음").toString();
             String content = doc.getText().length() > 100 ? 
                 doc.getText().substring(0, 100) + "..." : doc.getText();
-            System.out.println(String.format("문서 %d: 파일=%s, 경로=%s, 조각ID=%s, 유사도=%.3f, 내용=%s", 
-                i+1, filename, filepath, chunkId, doc.getScore(), content));
-            System.out.println("  전체 메타데이터: " + doc.getMetadata());
+            logger.info("문서 {}: 파일={}, 경로={}, 조각ID={}, 유사도={:.3f}, 내용={}", 
+                i+1, filename, filepath, chunkId, doc.getScore(), content);
+            logger.info("  전체 메타데이터: {}", doc.getMetadata());
         }
-        System.out.println("========================");
+        logger.info("========================");
         
         // 필터링된 문서를 기반으로 출처 정보 생성 (중복 제거)
         Set<String> processedChunks = new HashSet<>(); // 중복 조각 추적용
@@ -608,10 +611,10 @@ public class RagService {
             .limit(5) // 최대 5개의 출처만 선택
             .map(doc -> {
                 SourceInfo source = SourceInfo.fromDocument(doc);
-                System.out.println("출처 정보 - 파일명: " + source.getFilename() + 
-                                 ", 조각 ID: " + source.getChunkId() +
-                                 ", 유사도: " + source.getSimilarityScore() + 
-                                 ", 내용 길이: " + (source.getContent() != null ? source.getContent().length() : 0));
+                logger.info("출처 정보 - 파일명: {}, 조각 ID: {}, 유사도: {}, 내용 길이: {}", 
+                    source.getFilename(), source.getChunkId(),
+                    source.getSimilarityScore(), 
+                    source.getContent() != null ? source.getContent().length() : 0);
                 return source;
             })
             .collect(Collectors.toList());
@@ -625,12 +628,12 @@ public class RagService {
         String context = contextWithIndices.toString();
         
         // 디버깅: context 내용 출력
-        System.out.println("=== 생성된 컨텍스트 ===");
-        System.out.println("문서 수: " + relevantDocuments.size());
-        System.out.println("컨텍스트 길이: " + context.length());
-        System.out.println("컨텍스트 내용 (미리보기): " + 
-            (context.length() > 200 ? context.substring(0, 200) + "..." : context));
-        System.out.println("========================");
+        logger.info("=== 생성된 컨텍스트 ===");
+        logger.info("문서 수: {}", relevantDocuments.size());
+        logger.info("컨텍스트 길이: {}", context.length());
+        logger.info("컨텍스트 내용 (미리보기): {}", 
+            context.length() > 200 ? context.substring(0, 200) + "..." : context);
+        logger.info("========================");
         
         if (context.trim().isEmpty()) {
             return Map.of(
@@ -680,8 +683,8 @@ public class RagService {
      * 출처 재계산: 답변의 참조 번호를 기반으로 정확한 출처 찾기
      */
     private SourceInfo findBestMatchingSource(String answer, List<Document> documents) {
-        System.out.println("=== 출처 재계산 시작 (번호 기반) ===");
-        System.out.println("답변 내용: " + answer.substring(0, Math.min(100, answer.length())) + "...");
+        logger.info("=== 출처 재계산 시작 (번호 기반) ===");
+        logger.info("답변 내용: {}...", answer.substring(0, Math.min(100, answer.length())));
         
         // 답변에서 모든 참조 번호 추출
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\[(\\d+)\\]");
@@ -692,7 +695,7 @@ public class RagService {
             refNumbers.add(Integer.parseInt(matcher.group(1)));
         }
         
-        System.out.println("찾은 참조 번호들: " + refNumbers);
+        logger.info("찾은 참조 번호들: {}", refNumbers);
         
         // 각 참조 번호에 해당하는 문서 확인 및 관련성 평가
         SourceInfo bestSource = new SourceInfo();
@@ -707,25 +710,25 @@ public class RagService {
                 // 관련성 점수 계산 (키워드 매칭)
                 double relevanceScore = calculateRelevanceScore(docContent);
                 
-                System.out.println("참조 번호 [" + refNum + "] 관련성 점수: " + relevanceScore);
-                System.out.println("문서 내용: " + docContent.substring(0, docContent.length() > 50 ? 50 : docContent.length()));
+                logger.info("참조 번호 [{}] 관련성 점수: {}", refNum, relevanceScore);
+                logger.info("문서 내용: {}", docContent.substring(0, Math.min(50, docContent.length())));
                 
                 if (relevanceScore > bestRelevanceScore) {
                     bestRelevanceScore = relevanceScore;
                     bestSource = SourceInfo.fromDocument(candidateDoc);
-                    System.out.println("새로운 최고 관련성 점수: " + relevanceScore);
+                    logger.info("새로운 최고 관련성 점수: {}", relevanceScore);
                 }
             }
         }
         
         // 참조 번호로 관련 문서를 찾았으면 반환
         if (bestRelevanceScore > 0) {
-            System.out.println("참조 번호 기반으로 선택된 출처: " + bestSource.getFilename());
+            logger.info("참조 번호 기반으로 선택된 출처: {}", bestSource.getFilename());
             return bestSource;
         }
         
         // 참조 번호로 관련 문서를 찾지 못하면 fallback
-        System.out.println("참조 번호로 관련 문서를 찾지 못해 기존 방식으로 fallback");
+        logger.info("참조 번호로 관련 문서를 찾지 못해 기존 방식으로 fallback");
         return findBestMatchingSourceByContent(answer, documents);
     }
     
@@ -756,16 +759,16 @@ public class RagService {
         for (Document doc : documents) {
             double score = calculateContentSimilarity(answer, doc.getText());
             String docPreview = doc.getText().length() > 50 ? doc.getText().substring(0, 50) : doc.getText();
-            System.out.println("문서 유사도: " + score + " - " + docPreview);
+            logger.info("문서 유사도: {} - {}", score, docPreview);
             
             if (score > maxScore) {
                 maxScore = score;
                 bestSource = SourceInfo.fromDocument(doc);
-                System.out.println("새로운 최고 점수: " + score);
+                logger.info("새로운 최고 점수: {}", score);
             }
         }
         
-        System.out.println("최종 선택된 출처: " + bestSource.getFilename());
+        logger.info("최종 선택된 출처: {}", bestSource.getFilename());
         return bestSource;
     }
     
@@ -812,37 +815,37 @@ public class RagService {
                     Object result = jedis.sendCommand(
                         redis.clients.jedis.Protocol.Command.valueOf("FT.DROPINDEX"),
                         "vector_index".getBytes(), "DD".getBytes());
-                    System.out.println("벡터 인덱스 삭제 완료: " + result);
+                    logger.info("벡터 인덱스 삭제 완료: {}", result);
                 } catch (Exception e) {
-                    System.out.println("벡터 인덱스 삭제 실패 (이미 없거나 오류): " + e.getMessage());
+                    logger.info("벡터 인덱스 삭제 실패 (이미 없거나 오류): {}", e.getMessage());
                 }
                 
                 // 2. 모든 벡터 관련 키 삭제
                 java.util.Set<String> ragKeys = jedis.keys("rag:*");
                 if (!ragKeys.isEmpty()) {
                     jedis.del(ragKeys.toArray(new String[0]));
-                    System.out.println("RAG 관련 키 " + ragKeys.size() + "개 삭제 완료");
+                    logger.info("RAG 관련 키 {}개 삭제 완료", ragKeys.size());
                 }
                 
                 // 3. 모든 embedding 키 삭제
                 java.util.Set<String> embeddingKeys = jedis.keys("embedding:*");
                 if (!embeddingKeys.isEmpty()) {
                     jedis.del(embeddingKeys.toArray(new String[0]));
-                    System.out.println("Embedding 관련 키 " + embeddingKeys.size() + "개 삭제 완료");
+                    logger.info("Embedding 관련 키 {}개 삭제 완료", embeddingKeys.size());
                 }
                 
                 jedis.close();
-                System.out.println("Redis 벡터 데이터가 삭제되었습니다.");
+                logger.info("Redis 벡터 데이터가 삭제되었습니다.");
                 
             } catch (Exception e) {
-                System.err.println("Redis 벡터 데이터 삭제 실패: " + e.getMessage());
+                logger.error("Redis 벡터 데이터 삭제 실패: {}", e.getMessage());
             }
             
-            System.out.println("Redis Vector Store가 초기화되었습니다.");
-            System.out.println("다음 문서 로드 시 새로운 벡터 데이터가 생성됩니다.");
+            logger.info("Redis Vector Store가 초기화되었습니다.");
+            logger.info("다음 문서 로드 시 새로운 벡터 데이터가 생성됩니다.");
             
         } catch (Exception e) {
-            System.err.println("벡터 저장소 초기화 실패: " + e.getMessage());
+            logger.error("벡터 저장소 초기화 실패: {}", e.getMessage());
             throw new RuntimeException("벡터 저장소 초기화 중 오류 발생", e);
         }
     }
@@ -879,7 +882,7 @@ public class RagService {
                     vectorStoreCount = loadedFiles.size() * 3; // 각 파일당 약 3개의 조각으로 가정
                 }
             } catch (Exception e) {
-                System.err.println("문서 상태 확인 실패: " + e.getMessage());
+                logger.error("문서 상태 확인 실패: {}", e.getMessage());
                 vectorStoreCount = 0;
             }
             
@@ -949,14 +952,14 @@ public class RagService {
             java.util.List<String> keyList = new java.util.ArrayList<>(keys);
             java.util.Collections.sort(keyList);
             
-            System.out.println("Redis에 저장된 문서 키: " + keyList.size() + "개");
+            logger.info("Redis에 저장된 문서 키: {}개", keyList.size());
             for (String key : keyList) {
-                System.out.println("  - " + key);
+                logger.info("  - {}", key);
             }
             
             return keyList;
         } catch (Exception e) {
-            System.err.println("Redis 키 조회 실패: " + e.getMessage());
+            logger.error("Redis 키 조회 실패: {}", e.getMessage());
             return new java.util.ArrayList<>();
         }
     }
@@ -975,15 +978,15 @@ public class RagService {
                 result.put(entry.getKey().toString(), entry.getValue());
             }
             
-            System.out.println("문서 내용 (" + key + "):");
-            System.out.println("  - ID: " + result.get("id"));
-            System.out.println("  - 저장 시간: " + result.get("saved_at"));
-            System.out.println("  - 내용 길이: " + (result.containsKey("content") ? result.get("content").toString().length() : 0) + "자");
-            System.out.println("  - 메타데이터: " + result.get("metadata"));
+            logger.info("문서 내용 ({}):", key);
+            logger.info("  - ID: {}", result.get("id"));
+            logger.info("  - 저장 시간: {}", result.get("saved_at"));
+            logger.info("  - 내용 길이: {}자", result.containsKey("content") ? result.get("content").toString().length() : 0);
+            logger.info("  - 메타데이터: {}", result.get("metadata"));
             
             return result;
         } catch (Exception e) {
-            System.err.println("Redis 문서 조회 실패 (" + key + "): " + e.getMessage());
+            logger.error("Redis 문서 조회 실패 ({}): {}", key, e.getMessage());
             return new java.util.HashMap<>();
         }
     }
@@ -1003,7 +1006,7 @@ public class RagService {
             }
         }
         
-        System.out.println("📚 총 " + documents.size() + "개의 문서를 Redis에서 조회했습니다.");
+        logger.info("📚 총 {}개의 문서를 Redis에서 조회했습니다.", documents.size());
         return documents;
     }
 
@@ -1017,7 +1020,7 @@ public class RagService {
             List<Map<String, Object>> redisDocuments = getAllRedisDocuments();
             
             if (redisDocuments.isEmpty()) {
-                System.out.println("Redis에 저장된 문서가 없습니다.");
+                logger.info("Redis에 저장된 문서가 없습니다.");
                 return;
             }
             
@@ -1041,8 +1044,8 @@ public class RagService {
             
             // 각 파일별로 문서 분할 처리
             for (Document originalDoc : documents) {
-                System.out.println("Redis 파일 분할 시작: " + originalDoc.getMetadata().get("filename"));
-                System.out.println("원본 내용 길이: " + originalDoc.getText().length());
+                logger.info("Redis 파일 분할 시작: {}", originalDoc.getMetadata().get("filename"));
+                logger.info("원본 내용 길이: {}", originalDoc.getText().length());
                 
                 // 개별 문서 분할
                 List<Document> singleDocList = new ArrayList<>();
@@ -1069,11 +1072,11 @@ public class RagService {
             vectorStore.add(allSplitDocuments);
                 
                 isInitialized = true;
-                System.out.println("Redis에서 " + documents.size() + "개 문서를 벡터 저장소에 로드했습니다.");
+                logger.info("Redis에서 {}개 문서를 벡터 저장소에 로드했습니다.", documents.size());
             }
             
         } catch (Exception e) {
-            System.err.println("Redis 문서 로드 실패: " + e.getMessage());
+            logger.error("Redis 문서 로드 실패: {}", e.getMessage());
             throw new RuntimeException("Redis 문서 로드 중 오류 발생", e);
         }
     }
@@ -1094,10 +1097,10 @@ public class RagService {
             folder = Paths.get(currentDir, folderPath);
         }
         
-        System.out.println("Redis 저장을 위한 문서 폴더 경로: " + folder.toAbsolutePath());
+        logger.info("Redis 저장을 위한 문서 폴더 경로: {}", folder.toAbsolutePath());
         
         if (!Files.exists(folder) || !Files.isDirectory(folder)) {
-            System.out.println("폴더가 존재하지 않습니다: " + folder.toAbsolutePath());
+            logger.info("폴더가 존재하지 않습니다: {}", folder.toAbsolutePath());
             return java.util.Map.of(
                 "savedCount", 0,
                 "duplicateCount", 0,
@@ -1125,13 +1128,13 @@ public class RagService {
                                            "saved_at", java.time.LocalDateTime.now().toString()));
                         allDocuments.add(document);
                         
-                        System.out.println("Redis 저장용 파일 로드 완료: " + path.getFileName());
+                        logger.info("Redis 저장용 파일 로드 완료: {}", path.getFileName());
                     } catch (IOException e) {
-                        System.err.println("파일 로드 실패: " + path + " - " + e.getMessage());
+                        logger.error("파일 로드 실패: {} - {}", path, e.getMessage());
                     }
                 });
         } catch (IOException e) {
-            System.err.println("폴더 스캔 실패: " + e.getMessage());
+            logger.error("폴더 스캔 실패: {}", e.getMessage());
             throw e;
         }
 
@@ -1155,7 +1158,7 @@ public class RagService {
                 // 중복 체크
                 if (existingKeys.contains(key)) {
                     duplicateCount++;
-                    System.out.println("중복 문서 건너뛰기: " + key);
+                    logger.info("중복 문서 건너뛰기: {}", key);
                     continue;
                 }
                 
@@ -1169,9 +1172,9 @@ public class RagService {
                 try {
                     redisTemplate.opsForHash().putAll(key, documentData);
                     savedCount++;
-                    System.out.println("Redis 저장 완료: " + key);
+                    logger.info("Redis 저장 완료: {}", key);
                 } catch (Exception e) {
-                    System.err.println("Redis 저장 실패 (문서 " + i + "): " + e.getMessage());
+                    logger.error("Redis 저장 실패 (문서 {}): {}", i, e.getMessage());
                 }
             }
             
@@ -1183,7 +1186,7 @@ public class RagService {
             
             String message = String.format("총 %d개 파일 처리 완료: %d개 저장, %d개 중복", 
                                            allDocuments.size(), savedCount, duplicateCount);
-            System.out.println(message);
+            logger.info(message);
             
             return java.util.Map.of(
                 "savedCount", savedCount,
@@ -1193,7 +1196,7 @@ public class RagService {
                 "message", message
             );
         } else {
-            System.out.println("폴더에 텍스트 파일이 없습니다: " + folder.toAbsolutePath());
+            logger.info("폴더에 텍스트 파일이 없습니다: {}", folder.toAbsolutePath());
             return java.util.Map.of(
                 "savedCount", 0,
                 "duplicateCount", 0,

@@ -5,11 +5,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.text.DecimalFormat;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class SourceInfo {
+    
+    private static final Logger logger = LoggerFactory.getLogger(SourceInfo.class);
+    
     private String filename;
     private String chunkId;  // Integer에서 String으로 변경
     private Double similarityScore;
@@ -20,9 +25,9 @@ public class SourceInfo {
         Map<String, Object> metadata = document.getMetadata();
 
         // 디버깅: 실제 메타데이터 확인
-        System.out.println("=== SourceInfo.fromDocument 디버깅 ===");
-        System.out.println("전체 메타데이터: " + metadata);
-        System.out.println("문서 내용: " + document.getText().substring(0, Math.min(100, document.getText().length())) + "...");
+        logger.info("=== SourceInfo.fromDocument 디버깅 ===");
+        logger.info("전체 메타데이터: {}", metadata);
+        logger.info("문서 내용: {}...", document.getText().substring(0, Math.min(100, document.getText().length())));
 
         // 메타데이터에서 파일명 추출
         String filename = metadata.getOrDefault("filename", "").toString();
@@ -84,8 +89,8 @@ public class SourceInfo {
         
         source.setContent(documentTitle);
         
-        System.out.println("최종 파일명: " + filename);
-        System.out.println("최종 제목: " + documentTitle);
+        logger.info("최종 파일명: {}", filename);
+        logger.info("최종 제목: {}", documentTitle);
         
         // 점수 및 ID 설정
         Double score = document.getScore();

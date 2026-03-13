@@ -39,3 +39,7 @@ out/
 ### Test files ###
 *.bat
 test-*.bat
+
+### Logs ###
+logs/
+*.log
