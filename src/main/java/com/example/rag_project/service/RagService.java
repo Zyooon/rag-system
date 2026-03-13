@@ -316,9 +316,15 @@ public class RagService {
                         List<Document> finalDocuments = new ArrayList<>();
                         for (Document doc : parsedDocuments) {
                             if (doc.getText().length() > 800) {
-                                // 긴 문서는 추가 분할
+                                // 긴 문서는 추가 분할 - 메타데이터 유지 확인
                                 List<Document> splitLongDocs = textSplitter.apply(List.of(doc));
-                                finalDocuments.addAll(splitLongDocs);
+                                // 분할된 문서들의 메타데이터 확인 및 복사
+                                for (Document splitDoc : splitLongDocs) {
+                                    // 원본 메타데이터를 복사하여 새 Document 생성
+                                    Map<String, Object> splitMetadata = new HashMap<>(doc.getMetadata());
+                                    Document finalDoc = new Document(splitDoc.getText(), splitMetadata);
+                                    finalDocuments.add(finalDoc);
+                                }
                             } else {
                                 finalDocuments.add(doc);
                             }
@@ -347,7 +353,10 @@ public class RagService {
             int globalChunkIndex = 0;
             
             for (Document originalDoc : allDocuments) {
-                String filename = originalDoc.getMetadata().get("filename").toString();
+                String filename = originalDoc.getMetadata().getOrDefault("filename", "알수없음").toString();
+                
+                // 메타데이터 디버깅
+                System.out.println("문서 처리 중 - 파일명: " + filename + ", 메타데이터: " + originalDoc.getMetadata());
                 
                 // 고유 ID 부여
                 Map<String, Object> metadata = new HashMap<>(originalDoc.getMetadata());
@@ -355,7 +364,10 @@ public class RagService {
                 metadata.put("chunk_id", uniqueId); 
                 metadata.put("file_chunk_index", globalChunkIndex);
                 
-                finalDocuments.add(new Document(originalDoc.getText(), metadata));
+                Document finalDoc = new Document(originalDoc.getText(), metadata);
+                System.out.println("최종 문서 생성 - 파일명: " + finalDoc.getMetadata().get("filename"));
+                
+                finalDocuments.add(finalDoc);
                 globalChunkIndex++;
             }
             
@@ -557,10 +569,13 @@ public class RagService {
         for (int i = 0; i < relevantDocuments.size(); i++) {
             Document doc = relevantDocuments.get(i);
             String filename = doc.getMetadata().getOrDefault("filename", "알수없음").toString();
+            String filepath = doc.getMetadata().getOrDefault("filepath", "없음").toString();
+            String chunkId = doc.getMetadata().getOrDefault("chunk_id", "없음").toString();
             String content = doc.getText().length() > 100 ? 
                 doc.getText().substring(0, 100) + "..." : doc.getText();
-            System.out.println(String.format("문서 %d: 파일=%s, 유사도=%.3f, 내용=%s", 
-                i+1, filename, doc.getScore(), content));
+            System.out.println(String.format("문서 %d: 파일=%s, 경로=%s, 조각ID=%s, 유사도=%.3f, 내용=%s", 
+                i+1, filename, filepath, chunkId, doc.getScore(), content));
+            System.out.println("  전체 메타데이터: " + doc.getMetadata());
         }
         System.out.println("========================");
         
@@ -638,7 +653,7 @@ public class RagService {
                     }
                 }
                 
-                // SourceInfo의 content를 문서제목-소제목 형식으로 변경
+                // 기존 content를 계층적 정보로 덮어쓰기
                 source.setContent(contextInfo);
                 
                 sourceContextHolder[0] = "context : " + contextInfo;
@@ -673,7 +688,7 @@ public class RagService {
         }
         
         String prompt = String.format("""
-            당신은 주어진 문서 내용을 바탕으로 질문에 답변하는 AI 어시스턴트입니다.
+            당신은 한국어 전문 AI 어시스턴트입니다. 반드시 한국어로만 답변해야 합니다.
             
             [문서 내용]
             %s
@@ -681,27 +696,32 @@ public class RagService {
             [사용자 질문]
             %s
             
-            답변 지침:
-            1. 문서 내용만 사용하여 답변하세요.
-            2. 질문에 직접적으로 답변하세요.
-            3. 자연스러운 한국어로 답변하세요.
+            중요 지침:
+            1. 절대적으로 한국어로만 답변하세요. 영어 단어나 문장을 사용하지 마세요.
+            2. 문서 내용만 사용하여 답변하세요.
+            3. 질문에 직접적으로 답변하세요.
             4. 문서에 관련 정보가 없다면 "문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
+            5. 모든 답변은 완벽한 한국어로 작성해야 합니다.
             
             %s
             
-            답변:
+            한국어 답변:
             """, context, query, sourceContextHolder[0]);
 
         try {
             String answer = chatModel.call(prompt);
+            // 가장 높은 유사도를 가진 출처 하나만 반환
+            SourceInfo bestSource = sources.isEmpty() ? new SourceInfo() : sources.get(0);
             return Map.of(
                 "answer", answer,
-                "sources", sources.get(0)
+                "sources", bestSource
             );
         } catch (Exception e) {
+            // 예외 시에도 가장 높은 유사도를 가진 출처 하나만 반환
+            SourceInfo bestSource = sources.isEmpty() ? new SourceInfo() : sources.get(0);
             return Map.of(
                 "answer", "AI 답변 생성 중 오류: " + e.getMessage(),
-                "sources", sources.get(0)
+                "sources", bestSource
             );
         }
     }
