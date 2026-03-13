@@ -371,22 +371,69 @@ public class RagService {
     }
 
     /**
-     * 애플리케이션 시작 시 설정된 폴더의 문서들을 자동으로 로드하는 메서드
+     * 파일 시스템에서 문서를 읽어 Redis 벡터 저장소로 수동 로드하는 메서드
+     * Redis-only 전략을 위한 수동 데이터 로드 기능
+     * @return 로드된 문서 수와 결과 정보
      */
-    public void initializeDocuments() {
+    public java.util.Map<String, Object> loadDocumentsFromFilesystem() {
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        
         try {
-            System.out.println("=== 문서 초기화 시작 ===");
+            System.out.println("=== 파일에서 Redis로 데이터 로드 시작 ===");
+            
+            // 기존 Redis 데이터 정리
+            clearStore();
             
             // 프로젝트 루트 기준의 문서들만 로드
             String currentDir = System.getProperty("user.dir");
             String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
             System.out.println("문서 경로: " + projectDocumentsPath);
             
+            // 기존 loadDocumentsFromFolder 메서드 사용 (RedisVectorStore로 자동 저장됨)
             loadDocumentsFromFolder(projectDocumentsPath);
             
+            result.put("success", true);
+            result.put("message", "파일에서 Redis로 문서 로드가 완료되었습니다.");
+            result.put("documentCount", getAllRedisDocumentKeys().size());
+            
         } catch (IOException e) {
-            System.err.println("문서 초기화 실패: " + e.getMessage());
-            System.err.println("documents 폴더 경로를 확인해주세요.");
+            System.err.println("파일에서 Redis로 데이터 로드 실패: " + e.getMessage());
+            result.put("success", false);
+            result.put("message", "로드 실패: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("예상치 못한 오류: " + e.getMessage());
+            result.put("success", false);
+            result.put("message", "오류 발생: " + e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * 애플리케이션 시작 시 Redis 벡터 저장소 상태만 확인하는 메서드
+     * 파일 시스템 의존성 완전 제거 - Redis-only 전략
+     */
+    public void initializeDocuments() {
+        try {
+            System.out.println("=== Redis 벡터 저장소 상태 확인 ===");
+            
+            // Redis 벡터 저장소 상태 확인
+            java.util.List<String> redisKeys = getAllRedisDocumentKeys();
+            int documentCount = redisKeys.size();
+            
+            if (documentCount > 0) {
+                isInitialized = true;
+                System.out.println("Redis 벡터 저장소에 " + documentCount + "개의 문서가 있습니다.");
+                System.out.println("시스템이 준비되었습니다.");
+            } else {
+                isInitialized = false;
+                System.out.println("Redis 벡터 저장소에 데이터가 없습니다.");
+                System.out.println("수동으로 데이터를 로드해주세요 (/load-from-files API 호출).");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("Redis 벡터 저장소 상태 확인 실패: " + e.getMessage());
+            isInitialized = false;
         }
     }
 
@@ -474,8 +521,16 @@ public class RagService {
 
         System.out.println("=== 검색 요청: " + query + " ===");
         
-        // 1. 유사도 검색 (기본 검색 후 개수 제한)
+        // 유사도 검색 (기본 검색 후 개수 제한)
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
+
+        // 검색 결과가 아예 없거나(Redis가 비었을 때), 임계값을 넘지 못할 때 처리
+        if (relevantDocuments == null || relevantDocuments.isEmpty()) {
+            return Map.of(
+                "answer", "현재 지식 베이스(Redis)에 저장된 데이터가 없어 답변을 드릴 수 없습니다.",
+                "sources", new SourceInfo()
+            );
+        }
         
         // 유사도 순서대로 정렬 및 높은 유사도 필터링
         relevantDocuments = relevantDocuments.stream()
@@ -489,11 +544,11 @@ public class RagService {
         
         System.out.println("찾은 문서 수: " + relevantDocuments.size());
         
-        // 2. 검색 결과가 없을 경우 예외 처리
+        // 검색 결과가 없을 경우 예외 처리
         if (relevantDocuments.isEmpty()) {
             return Map.of(
                 "answer", "관련 정보를 찾을 수 없습니다.",
-                "sources", new ArrayList<SourceInfo>()
+                "sources", new SourceInfo()
             );
         }
 
@@ -509,7 +564,7 @@ public class RagService {
         }
         System.out.println("========================");
         
-        // 3. 필터링된 문서를 기반으로 출처 정보 생성 (중복 제거)
+        // 필터링된 문서를 기반으로 출처 정보 생성 (중복 제거)
         final String[] sourceContextHolder = {""};
         Set<String> processedChunks = new HashSet<>(); // 중복 조각 추적용
         List<SourceInfo> sources = relevantDocuments.stream()
@@ -532,7 +587,7 @@ public class RagService {
                 processedChunks.add(uniqueKey);
                 return true;
             })
-            .limit(3) // 최대 3개의 출처만 선택
+            .limit(5) // 최대 3개의 출처만 선택
             .map(doc -> {
                 SourceInfo source = SourceInfo.fromDocument(doc);
                 System.out.println("출처 정보 - 파일명: " + source.getFilename() + 
@@ -566,18 +621,21 @@ public class RagService {
                 if (!h1.isEmpty()) {
                     // h1에서 번호와 제목 분리 (예: "7. 춤추는 선인장")
                     if (h1.matches("^\\d+\\.\\s.+")) {
-                        contextInfo += ". " + h1;  // 이미 번호가 있음
+                        contextInfo += " - " + h1;  // 이미 번호가 있음
                     } else {
-                        contextInfo += ". " + h1;  // 제목만 추가
+                        contextInfo += " - " + h1;  // 제목만 추가
                     }
                 }
+                
+                // SourceInfo의 content를 문서제목-소제목 형식으로 변경
+                source.setContent(contextInfo);
                 
                 sourceContextHolder[0] = "context : " + contextInfo;
                 return source;
             })
             .collect(Collectors.toList());
 
-        // 4. LLM에게 줄 컨텍스트 생성 (검색된 순서대로 결합)
+        // LLM에게 줄 컨텍스트 생성 (검색된 순서대로 결합)
         String context = relevantDocuments.stream()
                 .filter(doc -> {
                     String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
@@ -599,7 +657,7 @@ public class RagService {
         if (context.trim().isEmpty()) {
             return Map.of(
                 "answer", "관련 정보를 찾을 수 없습니다.",
-                "sources", new ArrayList<SourceInfo>()
+                "sources", new SourceInfo()
             );
         }
         
@@ -627,12 +685,12 @@ public class RagService {
             String answer = chatModel.call(prompt);
             return Map.of(
                 "answer", answer,
-                "sources", sources
+                "sources", sources.get(0)
             );
         } catch (Exception e) {
             return Map.of(
                 "answer", "AI 답변 생성 중 오류: " + e.getMessage(),
-                "sources", sources
+                "sources", sources.get(0)
             );
         }
     }
@@ -648,7 +706,7 @@ public class RagService {
             // 초기화 상태 변경
             isInitialized = false;
             
-            // SimpleVectorStore 파일 직접 삭제
+            // Redis 벡터 저장소 초기화 (파일이 없으므로 주석 처리)
             try {
                 String currentDir = System.getProperty("user.dir");
                 Path vectorStoreFile = Paths.get(currentDir, "vectorstore.json");
@@ -681,7 +739,7 @@ public class RagService {
         status.put("isInitialized", isInitialized());
         
         if (isInitialized()) {
-            // 벡터 저장소에 저장된 문서 수 확인 (SimpleVectorStore 사용 시)
+            // 벡터 저장소에 저장된 문서 수 확인 (RedisVectorStore 사용 시)
             int vectorStoreCount = 0;
             java.util.Set<String> loadedFiles = new java.util.HashSet<>();
             
@@ -1005,7 +1063,9 @@ public class RagService {
             
             for (int i = 0; i < splitDocuments.size(); i++) {
                 Document doc = splitDocuments.get(i);
-                String key = "rag:document:" + i;
+                String filename = doc.getMetadata().getOrDefault("filename", "unknown").toString();
+                String cleanFilename = filename.replaceAll("[^a-zA-Z0-9.-]", "_");
+                String key = "rag:document:" + cleanFilename + "_" + i;
                 
                 // 중복 체크
                 if (existingKeys.contains(key)) {

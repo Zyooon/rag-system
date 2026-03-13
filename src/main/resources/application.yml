@@ -38,7 +38,7 @@ rag:
     threshold: 0.3
     max-results: 5
   vectorstore:
-    type: simple  # redis 또는 simple (현재는 simple만 지원)
+    type: simple  # 임시: RedisVectorStore 호환 문제로 SimpleVectorStore 사용
 
 server:
   port: 8080

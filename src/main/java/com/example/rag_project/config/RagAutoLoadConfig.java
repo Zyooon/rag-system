@@ -21,49 +21,29 @@ import java.util.Set;
 public class RagAutoLoadConfig {
 
     private final RagService ragService;
-    private final RedisTemplate<String, Object> redisTemplate;
 
     /**
-     * 애플리케이션 시작 시 Redis에 저장된 문서가 있는지 확인하고 자동으로 로드
+     * 애플리케이션 시작 시 Redis 연결상태 확인
      */
     @Bean
     public ApplicationRunner ragAutoLoadRunner() {
         return args -> {
-            log.info("RAG 자동 로드 시작...");
+            log.info("=== RAG 시스템 시작: Redis 연결 상태 점검 ===");
             
             try {
-                // 항상 파일 시스템에서 문서를 먼저 로드
-                log.info("파일 시스템에서 문서를 로드합니다...");
-                ragService.initializeDocuments();
+                // Redis 연결 테스트 (RagService에 이미 구현된 메서드 활용)
+                boolean isConnected = ragService.testRedisConnection();
                 
-                // Redis에 저장된 문서 키 확인
-                Set<String> redisKeys = redisTemplate.keys("rag:document:*");
-                
-                if (redisKeys != null && !redisKeys.isEmpty()) {
-                    log.info("Redis에 {}개의 추가 문서가 발견되었습니다.", redisKeys.size());
-                    
-                    // Redis에서 문서 데이터 로드
-                    List<Map<String, Object>> documents = ragService.getAllRedisDocuments();
-                    
-                    if (!documents.isEmpty()) {
-                        // 문서 내용을 벡터 저장소에 로드
-                        ragService.loadDocumentsFromRedis();
-                        
-                        log.info("Redis 문서 추가 로드 완료: {}개 문서", documents.size());
-                    }
+                if (isConnected) {
+                    log.info("Redis 서버에 성공적으로 연결되었습니다.");
+                    log.info("지식 베이스 준비 완료. 서비스 사용이 가능합니다.");
                 } else {
-                    log.info("Redis에 저장된 추가 문서가 없습니다.");
+                    log.warn("Redis 연결에 실패했습니다. 저장소 기능을 사용할 수 없습니다.");
                 }
-                
-                log.info("RAG 문서 자동 로드 완료");
-                log.info("이제 질의응답을 바로 사용할 수 있습니다.");
-                
             } catch (Exception e) {
-                log.error("RAG 자동 로드 실패: {}", e.getMessage(), e);
-                log.info("수동으로 /api/rag/reload를 호출하여 문서를 다시 로드할 수 있습니다.");
+                log.error("Redis 연결 체크 중 오류 발생: {}", e.getMessage());
             }
-            
-            log.info("RAG 자동 로드 종료");
         };
     }
+   
 }

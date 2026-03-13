@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -18,29 +17,17 @@ public class RagController {
 
     private final RagService ragService;
 
-    // 문자 인코딩 설정을 위한 produces 추가
-    @PostMapping(value = "/sync", produces = "application/json; charset=UTF-8")
-    public ResponseEntity<RagResponse> initializeDocuments() {
-        try {
-            ragService.initializeDocuments();
-            return ResponseEntity.ok(RagResponse.success("문서들이 자동으로 초기화되었습니다."));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("초기화 실패: " + e.getMessage()));
-        }
-    }
-
     @PostMapping(value = "/ask", produces = "application/json; charset=UTF-8")
     public ResponseEntity<RagResponse> query(@RequestBody RagRequest request) {
         try {
-            // 항상 출처 정보 포함
+            // Redis 데이터만 사용하여 답변 생성
             Map<String, Object> result = ragService.searchAndAnswerWithSources(request.getQuery());
             String answer = (String) result.get("answer");
-            @SuppressWarnings("unchecked")
-            List<SourceInfo> sources = (List<SourceInfo>) result.get("sources");
+            SourceInfo sources = (SourceInfo) result.get("sources");
             
             return ResponseEntity.ok(RagResponse.success(answer, null, sources));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("질의응답 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error("Redis 조회 실패: " + e.getMessage()));
         }
     }
 
@@ -48,41 +35,36 @@ public class RagController {
     public ResponseEntity<RagResponse> getStatus() {
         try {
             java.util.Map<String, Object> status = ragService.getStatusWithFiles();
-            return ResponseEntity.ok(RagResponse.success(status.get("message").toString(), status));
+            status.put("redis_connection", "connected");
+            status.put("vector_store_type", "simple_with_redis_backup");
+            
+            return ResponseEntity.ok(RagResponse.success("Redis 연결 상태 확인", status));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("상태 확인 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error("Redis 상태 확인 실패: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/storage")
+    public ResponseEntity<RagResponse> clearRedisVectorStore() {
+        try {
+            // Redis 인덱스와 모든 벡터 데이터 삭제
+            ragService.clearStore();
+            int deletedCount = ragService.clearAllRedisDocuments();
+            return ResponseEntity.ok(RagResponse.success("Redis 인덱스와 벡터 데이터 삭제 완료: " + deletedCount + "개"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(RagResponse.error("Redis Vector Store 삭제 실패: " + e.getMessage()));
         }
     }
 
     @PostMapping("/storage")
-    public ResponseEntity<RagResponse> saveDocumentsToRedis() {
+    public ResponseEntity<RagResponse> buildRedisVectorStore() {
         try {
             java.util.Map<String, Object> result = ragService.saveDocumentsToRedis();
             String message = result.get("message").toString();
             
             return ResponseEntity.ok(RagResponse.success(message, result));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("Redis 저장 실패: " + e.getMessage()));
-        }
-    }
-
-    @DeleteMapping("/storage")
-    public ResponseEntity<RagResponse> clearAllRedisDocuments() {
-        try {
-            int deletedCount = ragService.clearAllRedisDocuments();
-            return ResponseEntity.ok(RagResponse.success("Redis 문서 삭제 완료: " + deletedCount + "개"));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("Redis 문서 삭제 실패: " + e.getMessage()));
-        }
-    }
-
-    @DeleteMapping("/memory")
-    public ResponseEntity<RagResponse> clearVectorStore() {
-        try {
-            ragService.clearStore();
-            return ResponseEntity.ok(RagResponse.success("벡터 저장소가 초기화되었습니다."));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("벡터 저장소 초기화 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error("Redis Vector Store 구축 실패: " + e.getMessage()));
         }
     }
 

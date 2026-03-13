@@ -42,7 +42,13 @@ public class SourceInfo {
             source.setSimilarityScore(0.0);
         }
         
-        source.setContent(document.getText());
+        // content 길이를 100자로 제한하고 말줄임표 추가
+        String fullContent = document.getText();
+        if (fullContent.length() > 100) {
+            source.setContent(fullContent.substring(0, 100) + "...");
+        } else {
+            source.setContent(fullContent);
+        }
         return source;
     }
 }

@@ -9,6 +9,7 @@ import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,10 +45,10 @@ public class RagConfig {
                 .build();
     }
 
-    // 벡터 저장소 설정 (현재는 Simple만 지원)
+    // 벡터 저장소 설정 (임시: SimpleVectorStore 사용 + Redis 백업)
     @Bean
     public VectorStore vectorStore(EmbeddingModel embeddingModel) {
-        System.out.println(" Simple 벡터 저장소를 사용합니다.");
+        System.out.println("Simple 벡터 저장소를 사용합니다 (Redis 백업 포함).");
         return SimpleVectorStore.builder(embeddingModel).build();
     }
 
