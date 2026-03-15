@@ -12,7 +12,6 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import com.example.rag_project.dto.SourceInfo;
-import com.example.rag_project.exception.RagServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1289,47 +1288,5 @@ public class RagService {
                 "message", "폴더에 텍스트 파일이 없습니다."
             );
         }
-    }
-
-    /**
-     * 현재 위치 정보를 포함하여 RagServiceException을 발생시키는 유틸리티 메서드
-     */
-    private RagServiceException createRagException(String message) {
-        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-        // 호출자의 스택 프레임 찾기 (현재 메서드와 createRagException 메서드 제외)
-        if (stackTrace.length > 3) {
-            StackTraceElement caller = stackTrace[3]; // 0: getStackTrace, 1: createRagException, 2: 호출 메서드, 3: 실제 호출자
-            String className = caller.getClassName();
-            String methodName = caller.getMethodName();
-            int lineNumber = caller.getLineNumber();
-            
-            // 클래스 이름에서 패키지 제거
-            String simpleClassName = className.substring(className.lastIndexOf('.') + 1);
-            
-            return new RagServiceException(message, simpleClassName, lineNumber, methodName);
-        }
-        
-        return new RagServiceException(message);
-    }
-
-    /**
-     * 현재 위치 정보를 포함하여 RagServiceException을 발생시키는 유틸리티 메서드 (원인 예외 포함)
-     */
-    private RagServiceException createRagException(String message, Throwable cause) {
-        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-        // 호출자의 스택 프레임 찾기
-        if (stackTrace.length > 3) {
-            StackTraceElement caller = stackTrace[3];
-            String className = caller.getClassName();
-            String methodName = caller.getMethodName();
-            int lineNumber = caller.getLineNumber();
-            
-            // 클래스 이름에서 패키지 제거
-            String simpleClassName = className.substring(className.lastIndexOf('.') + 1);
-            
-            return new RagServiceException(message, cause, simpleClassName, lineNumber, methodName);
-        }
-        
-        return new RagServiceException(message, cause);
     }
 }
