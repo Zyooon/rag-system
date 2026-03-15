@@ -241,8 +241,19 @@ public class RagService {
         // 텍스트 파일에서 문서 읽기
         List<Document> documents = textReader.get();
         
+        // 문장 구분 기호 설정
+        List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
+        
         // 문서를 작은 조각으로 분할 (토큰 기반)
-        TokenTextSplitter textSplitter = new TokenTextSplitter();
+        TokenTextSplitter textSplitter = new TokenTextSplitter(
+            200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
+            50,     // minChunkSizeChars: 너무 짧은 파편 방지
+            20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
+            500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
+            true,   // keepSeparator: 문장 구조 유지를 위해 true
+            punctuationMarks
+        );
+        
         List<Document> splitDocuments = textSplitter.apply(documents);
         
         // 분할된 문서를 벡터 저장소에 추가
@@ -288,8 +299,16 @@ public class RagService {
         }
 
         List<Document> allDocuments = new ArrayList<>();
-        // 기본 TokenTextSplitter 사용 (자동으로 최적화된 크기로 분할)
-        TokenTextSplitter textSplitter = new TokenTextSplitter();
+        // 문서를 작은 조각으로 분할 (토큰 기반)
+        List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
+        TokenTextSplitter textSplitter = new TokenTextSplitter(
+            200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
+            50,     // minChunkSizeChars: 너무 짧은 파편 방지
+            20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
+            500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
+            true,   // keepSeparator: 문장 구조 유지를 위해 true
+            punctuationMarks
+        );
 
         try {
             // 폴더 내의 모든 .txt와 .md 파일 처리
@@ -1041,7 +1060,16 @@ public class RagService {
             if (!documents.isEmpty()) {
             List<Document> allSplitDocuments = new ArrayList<>();
             int globalChunkIndex = 0;
-            TokenTextSplitter textSplitter = new TokenTextSplitter();
+            // 문서를 작은 조각으로 분할 (토큰 기반)
+            List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
+            TokenTextSplitter textSplitter = new TokenTextSplitter(
+                200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
+                50,     // minChunkSizeChars: 너무 짧은 파편 방지
+                20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
+                500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
+                true,   // keepSeparator: 문장 구조 유지를 위해 true
+                punctuationMarks
+            );
             
             // 각 파일별로 문서 분할 처리
             for (Document originalDoc : documents) {
@@ -1111,7 +1139,16 @@ public class RagService {
         }
 
         List<Document> allDocuments = new ArrayList<>();
-        TokenTextSplitter textSplitter = new TokenTextSplitter();
+        // 문서를 작은 조각으로 분할 (토큰 기반)
+        List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
+        TokenTextSplitter textSplitter = new TokenTextSplitter(
+            200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
+            50,     // minChunkSizeChars: 너무 짧은 파편 방지
+            20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
+            500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
+            true,   // keepSeparator: 문장 구조 유지를 위해 true
+            punctuationMarks
+        );
 
         try {
             // 폴더 내의 모든 .txt와 .md 파일 처리
