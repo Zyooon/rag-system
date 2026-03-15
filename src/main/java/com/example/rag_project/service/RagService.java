@@ -228,6 +228,194 @@ public class RagService {
     @Value("${rag.search.max-results:5}") // 설정이 없으면 5를 기본으로 사용
     private int maxSearchResults;
 
+    // TokenTextSplitter 설정을 위한 상수들
+    private static final int DEFAULT_CHUNK_SIZE = 150;
+    private static final int DEFAULT_MIN_CHUNK_SIZE_CHARS = 50;
+    private static final int DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED = 20;
+    private static final int DEFAULT_MAX_NUM_CHUNKS = 500;
+    private static final boolean DEFAULT_KEEP_SEPARATOR = true;
+    private static final List<Character> DEFAULT_PUNCTUATION_MARKS = List.of('.', '\n', ']', '-');
+
+    /**
+     * 기본 TokenTextSplitter를 생성하는 유틸리티 메서드
+     * @return 기본 설정이 적용된 TokenTextSplitter
+     */
+    private TokenTextSplitter createDefaultTextSplitter() {
+        return new TokenTextSplitter(
+            DEFAULT_CHUNK_SIZE,
+            DEFAULT_MIN_CHUNK_SIZE_CHARS,
+            DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED,
+            DEFAULT_MAX_NUM_CHUNKS,
+            DEFAULT_KEEP_SEPARATOR,
+            DEFAULT_PUNCTUATION_MARKS
+        );
+    }
+
+    /**
+     * 사용자 정의 TokenTextSplitter를 생성하는 유틸리티 메서드
+     * @param chunkSize 청크 크기
+     * @param minChunkSizeChars 최소 청크 문자 수
+     * @param minChunkLengthToEmbed 임베딩 최소 길이
+     * @param maxNumChunks 최대 청크 수
+     * @param keepSeparator 구분자 유지 여부
+     * @param punctuationMarks 구분자 목록
+     * @return 사용자 정의 설정이 적용된 TokenTextSplitter
+     */
+    private TokenTextSplitter createCustomTextSplitter(
+            int chunkSize, 
+            int minChunkSizeChars, 
+            int minChunkLengthToEmbed, 
+            int maxNumChunks, 
+            boolean keepSeparator, 
+            List<Character> punctuationMarks) {
+        return new TokenTextSplitter(
+            chunkSize,
+            minChunkSizeChars,
+            minChunkLengthToEmbed,
+            maxNumChunks,
+            keepSeparator,
+            punctuationMarks
+        );
+    }
+
+    /**
+     * TokenTextSplitter 설정 비교 테스트 메서드
+     * @param query 검색할 질문
+     * @return 두 가지 설정의 비교 결과
+     */
+    public java.util.Map<String, Object> compareSplitterConfigurations(String query) {
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        
+        try {
+            // 1. 기본 설정으로 검색
+            logger.info("=== 기본 설정으로 검색 시작 ===");
+            long startTime1 = System.currentTimeMillis();
+            java.util.Map<String, Object> result1 = searchAndAnswerWithSources(query);
+            long endTime1 = System.currentTimeMillis();
+            
+            // 2. 새로운 설정으로 검색 (임시로 벡터 저장소에 새로운 청크 로드)
+            logger.info("=== 새로운 설정으로 검색 시작 ===");
+            
+            // 새로운 설정으로 문서 다시 로드
+            loadDocumentsWithNewSplitter();
+            
+            long startTime2 = System.currentTimeMillis();
+            java.util.Map<String, Object> result2 = searchAndAnswerWithSources(query);
+            long endTime2 = System.currentTimeMillis();
+            
+            // 결과 비교
+            java.util.Map<String, Object> comparison = new java.util.HashMap<>();
+            comparison.put("default_config", java.util.Map.of(
+                "answer", result1.get("answer"),
+                "sources", result1.get("sources"),
+                "response_time_ms", endTime1 - startTime1,
+                "config", "chunkSize=200, minChunkSizeChars=50"
+            ));
+            
+            comparison.put("new_config", java.util.Map.of(
+                "answer", result2.get("answer"), 
+                "sources", result2.get("sources"),
+                "response_time_ms", endTime2 - startTime2,
+                "config", "chunkSize=400, minChunkSizeChars=100"
+            ));
+            
+            result.put("comparison", comparison);
+            result.put("query", query);
+            result.put("message", "TokenTextSplitter 설정 비교 완료");
+            
+            // 원래 설정으로 복원
+            loadDocumentsWithDefaultSplitter();
+            
+        } catch (Exception e) {
+            logger.error("설정 비교 실패: {}", e.getMessage(), e);
+            result.put("error", e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * 새로운 설정으로 문서 로드
+     */
+    private void loadDocumentsWithNewSplitter() throws IOException {
+        // 벡터 저장소 초기화
+        clearStore();
+        
+        // 새로운 설정으로 문서 로드
+        String currentDir = System.getProperty("user.dir");
+        String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
+        loadDocumentsFromFolderWithCustomSplitter(projectDocumentsPath);
+    }
+
+    /**
+     * 기본 설정으로 문서 로드
+     */
+    private void loadDocumentsWithDefaultSplitter() throws IOException {
+        // 벡터 저장소 초기화
+        clearStore();
+        
+        // 기본 설정으로 문서 로드
+        String currentDir = System.getProperty("user.dir");
+        String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
+        loadDocumentsFromFolder(projectDocumentsPath);
+    }
+
+    /**
+     * 사용자 정의 TokenTextSplitter로 폴더 문서 로드
+     */
+    private void loadDocumentsFromFolderWithCustomSplitter(String folderPath) throws IOException {
+        Path folder = Paths.get(folderPath);
+        
+        if (!Files.exists(folder)) {
+            logger.warn("폴더가 존재하지 않습니다: {}", folder.toAbsolutePath());
+            return;
+        }
+
+        List<Document> allDocuments = new ArrayList<>();
+        // 새로운 설정으로 TokenTextSplitter 생성
+        TokenTextSplitter textSplitter = createCustomTextSplitter(
+            400,    // chunkSize: 더 큰 청크
+            100,    // minChunkSizeChars: 더 긴 최소 크기
+            10,     // minChunkLengthToEmbed: 더 낮은 임베딩 기준
+            1000,   // maxNumChunks: 더 많은 청크
+            true,    // keepSeparator: 문장 구조 유지
+            DEFAULT_PUNCTUATION_MARKS
+        );
+
+        try {
+            Files.list(folder)
+                .filter(path -> {
+                    String fileName = path.getFileName().toString().toLowerCase();
+                    return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                })
+                .forEach(path -> {
+                    try {
+                        String content = Files.readString(path);
+                        Document document = new Document(content, 
+                            java.util.Map.of("filename", path.getFileName().toString(), 
+                                           "filepath", path.toString(),
+                                           "saved_at", java.time.LocalDateTime.now().toString()));
+                        allDocuments.add(document);
+                        
+                        logger.info("새 설정으로 파일 로드: {}", path.getFileName());
+                    } catch (IOException e) {
+                        logger.error("파일 읽기 실패: {}", path, e);
+                    }
+                });
+
+            if (!allDocuments.isEmpty()) {
+                List<Document> splitDocuments = textSplitter.apply(allDocuments);
+                vectorStore.add(splitDocuments);
+                isInitialized = true;
+                logger.info("새 설정으로 {}개 문서를 벡터 저장소에 로드했습니다", splitDocuments.size());
+            }
+            
+        } catch (Exception e) {
+            logger.error("새 설정으로 문서 로드 실패: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
     /**
      * 텍스트 파일을 읽어서 벡터 저장소에 로드하는 메서드
      * @param filePath 클래스패스 기반의 파일 경로
@@ -240,18 +428,8 @@ public class RagService {
         // 텍스트 파일에서 문서 읽기
         List<Document> documents = textReader.get();
         
-        // 문장 구분 기호 설정
-        List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
-        
         // 문서를 작은 조각으로 분할 (토큰 기반)
-        TokenTextSplitter textSplitter = new TokenTextSplitter(
-            200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
-            50,     // minChunkSizeChars: 너무 짧은 파편 방지
-            20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
-            500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
-            true,   // keepSeparator: 문장 구조 유지를 위해 true
-            punctuationMarks
-        );
+        TokenTextSplitter textSplitter = createDefaultTextSplitter();
         
         List<Document> splitDocuments = textSplitter.apply(documents);
         
@@ -299,15 +477,7 @@ public class RagService {
 
         List<Document> allDocuments = new ArrayList<>();
         // 문서를 작은 조각으로 분할 (토큰 기반)
-        List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
-        TokenTextSplitter textSplitter = new TokenTextSplitter(
-            200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
-            50,     // minChunkSizeChars: 너무 짧은 파편 방지
-            20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
-            500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
-            true,   // keepSeparator: 문장 구조 유지를 위해 true
-            punctuationMarks
-        );
+        TokenTextSplitter textSplitter = createDefaultTextSplitter();
 
         try {
             // 폴더 내의 모든 .txt와 .md 파일 처리
@@ -1107,15 +1277,7 @@ public class RagService {
             List<Document> allSplitDocuments = new ArrayList<>();
             int globalChunkIndex = 0;
             // 문서를 작은 조각으로 분할 (토큰 기반)
-            List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
-            TokenTextSplitter textSplitter = new TokenTextSplitter(
-                200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
-                50,     // minChunkSizeChars: 너무 짧은 파편 방지
-                20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
-                500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
-                true,   // keepSeparator: 문장 구조 유지를 위해 true
-                punctuationMarks
-            );
+            TokenTextSplitter textSplitter = createDefaultTextSplitter();
             
             // 각 파일별로 문서 분할 처리
             for (Document originalDoc : documents) {
@@ -1186,15 +1348,7 @@ public class RagService {
 
         List<Document> allDocuments = new ArrayList<>();
         // 문서를 작은 조각으로 분할 (토큰 기반)
-        List<Character> punctuationMarks = List.of('.', '\n', ']', '-');
-        TokenTextSplitter textSplitter = new TokenTextSplitter(
-            200,    // chunkSize: 각 항목이 작으므로 150~200 토큰이면 충분
-            50,     // minChunkSizeChars: 너무 짧은 파편 방지
-            20,     // minChunkLengthToEmbed: 의미 없는 짧은 줄 제거
-            500,    // maxNumChunks: 샘플 양에 비해 충분한 여유
-            true,   // keepSeparator: 문장 구조 유지를 위해 true
-            punctuationMarks
-        );
+        TokenTextSplitter textSplitter = createDefaultTextSplitter();
 
         try {
             // 폴더 내의 모든 .txt와 .md 파일 처리

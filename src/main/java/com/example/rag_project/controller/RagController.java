@@ -79,4 +79,19 @@ public class RagController {
         }
     }
 
+    @PostMapping("/test/splitter-compare")
+    public ResponseEntity<RagResponse> compareSplitterConfigurations(@RequestBody Map<String, String> request) {
+        try {
+            String query = request.get("query");
+            if (query == null || query.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(RagResponse.error("질문을 입력해주세요."));
+            }
+            
+            Map<String, Object> result = ragService.compareSplitterConfigurations(query);
+            return ResponseEntity.ok(RagResponse.success("TokenTextSplitter 설정 비교 완료", result));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(RagResponse.error("설정 비교 실패: " + e.getMessage()));
+        }
+    }
+
 }
