@@ -909,25 +909,55 @@ public class RagService {
             // Redis에 저장된 문서도 확인 (있는 경우)
             java.util.List<String> redisKeys = getAllRedisDocumentKeys();
             if (!redisKeys.isEmpty()) {
-                vectorStoreCount = Math.max(vectorStoreCount, redisKeys.size());
+                logger.info("Redis에서 {}개의 문서 키를 찾았습니다", redisKeys.size());
+                
                 // Redis 메타데이터에서 파일명 추출
                 for (String key : redisKeys) {
                     try {
                         java.util.Map<String, Object> doc = getRedisDocument(key);
+                        logger.info("Redis 문서 조회 - 키: {}, 내용: {}", key, doc.keySet());
+                        
                         if (doc.containsKey("metadata")) {
                             Object metadata = doc.get("metadata");
+                            logger.info("메타데이터 타입: {}, 값: {}", metadata.getClass().getSimpleName(), metadata);
+                            
                             if (metadata instanceof java.util.Map) {
                                 java.util.Map<?, ?> metaMap = (java.util.Map<?, ?>) metadata;
                                 Object filename = metaMap.get("filename");
                                 if (filename != null) {
                                     loadedFiles.add(filename.toString());
+                                    logger.info("파일명 추가: {}", filename);
+                                } else {
+                                    logger.warn("메타데이터에 filename이 없습니다: {}", metaMap.keySet());
+                                }
+                            } else if (metadata instanceof String) {
+                                // 메타데이터가 JSON 문자열인 경우
+                                try {
+                                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                    @SuppressWarnings("unchecked")
+                                    java.util.Map<String, Object> metaMap = mapper.readValue((String) metadata, java.util.Map.class);
+                                    Object filename = metaMap.get("filename");
+                                    if (filename != null) {
+                                        loadedFiles.add(filename.toString());
+                                        logger.info("JSON에서 파일명 추출: {}", filename);
+                                    }
+                                } catch (Exception jsonEx) {
+                                    logger.warn("메타데이터 JSON 파싱 실패: {}", jsonEx.getMessage());
                                 }
                             }
+                        } else {
+                            logger.warn("문서에 metadata 키가 없습니다: {}", doc.keySet());
                         }
                     } catch (Exception e) {
-                        // 무시하고 계속 진행
+                        logger.error("문서 처리 실패 ({}): {}", key, e.getMessage(), e);
                     }
                 }
+                
+                // Redis 문서 수로 업데이트
+                vectorStoreCount = Math.max(vectorStoreCount, redisKeys.size());
+                logger.info("최종 로드된 파일 목록: {}", loadedFiles);
+            } else {
+                logger.info("Redis에 저장된 문서가 없습니다");
             }
             
             status.put("loadedFiles", new java.util.ArrayList<>(loadedFiles));
@@ -947,7 +977,24 @@ public class RagService {
      * @return 초기화 여부
      */
     public boolean isInitialized() {
-        return isInitialized;
+        // 내부 플래그가 true이면 바로 반환
+        if (isInitialized) {
+            return true;
+        }
+        
+        // 내부 플래그가 false이면 Redis 상태 확인
+        try {
+            java.util.List<String> redisKeys = getAllRedisDocumentKeys();
+            if (!redisKeys.isEmpty()) {
+                logger.info("Redis에 {}개의 문서가 있어 초기화된 것으로 간주합니다", redisKeys.size());
+                isInitialized = true; // 상태 동기화
+                return true;
+            }
+        } catch (Exception e) {
+            logger.warn("Redis 상태 확인 중 오류: {}", e.getMessage());
+        }
+        
+        return false;
     }
 
     /**
