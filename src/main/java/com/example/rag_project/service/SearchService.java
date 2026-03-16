@@ -1,5 +1,9 @@
 package com.example.rag_project.service;
 
+import com.example.rag_project.constants.ConfigConstants;
+import com.example.rag_project.constants.MetadataConstants;
+import com.example.rag_project.constants.MessageConstants;
+import com.example.rag_project.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -49,10 +53,10 @@ public class SearchService {
     private final VectorStore vectorStore;
     private final ChatModel chatModel;
 
-    @Value("${rag.search.threshold:0.7}")
+    @Value("${" + ConfigConstants.CONFIG_SEARCH_THRESHOLD + ":" + ConfigConstants.DEFAULT_SEARCH_THRESHOLD + "}")
     private double similarityThreshold;
 
-    @Value("${rag.search.max-results:5}")
+    @Value("${" + ConfigConstants.CONFIG_SEARCH_MAX_RESULTS + ":" + ConfigConstants.DEFAULT_MAX_RESULTS + "}")
     private int maxSearchResults;
 
     /**
@@ -62,7 +66,7 @@ public class SearchService {
         List<Document> relevantDocuments = vectorStore.similaritySearch(query);
         
         if (relevantDocuments.isEmpty()) {
-            return "관련 정보를 찾을 수 없습니다.";
+            return MessageConstants.MSG_NO_RELEVANT_INFO;
         }
 
         List<Document> filteredDocuments = relevantDocuments.stream()
@@ -73,38 +77,22 @@ public class SearchService {
             .collect(Collectors.toList());
 
         if (filteredDocuments.isEmpty()) {
-            return "질문과 관련된 충분히 신뢰할 수 있는 정보를 찾을 수 없습니다.";
+            return MessageConstants.MSG_NO_RELIABLE_INFO;
         }
         
         String context = relevantDocuments.stream()
                 .filter(doc -> {
-                    String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
-                    return !filename.equals("README.md");
+                    String filename = doc.getMetadata().getOrDefault(MetadataConstants.METADATA_FILENAME, MetadataConstants.UNKNOWN).toString();
+                    return !filename.equals(MessageConstants.README_FILENAME);
                 })
                 .map(Document::getText)
                 .collect(Collectors.joining("\n\n"));
         
         if (context.trim().isEmpty()) {
-            return "관련 정보를 찾을 수 없습니다.";
+            return MessageConstants.MSG_NO_RELEVANT_INFO;
         }
         
-        String prompt = String.format("""
-            당신은 주어진 문서 내용을 바탕으로 질문에 답변하는 AI 어시스턴트입니다.
-            
-            [문서 내용]
-            %s
-            
-            [사용자 질문]
-            %s
-            
-            답변 지침:
-            1. 문서 내용만 사용하여 답변하세요.
-            2. 질문에 직접적으로 답변하세요.
-            3. 자연스러운 한국어로 답변하세요.
-            4. 문서에 관련 정보가 없다면 "문서에서 관련 정보를 찾을 수 없습니다"라고 답변하세요.
-            
-            답변:
-            """, context, query);
+        String prompt = PromptTemplate.createBasicSearchPrompt(context, query);
 
         try {
             return chatModel.call(prompt);
@@ -121,8 +109,8 @@ public class SearchService {
 
         if (relevantDocuments == null || relevantDocuments.isEmpty()) {
             return Map.of(
-                "answer", "현재 지식 베이스(Redis)에 저장된 데이터가 없어 답변을 드릴 수 없습니다.",
-                "sources", new SourceInfo()
+                MetadataConstants.MAP_KEY_ANSWER, MessageConstants.MSG_NO_KNOWLEDGE_BASE,
+                MetadataConstants.MAP_KEY_SOURCES, new SourceInfo()
             );
         }
         
@@ -137,19 +125,19 @@ public class SearchService {
         
         if (relevantDocuments.isEmpty()) {
             return Map.of(
-                "answer", "관련 정보를 찾을 수 없습니다.",
-                "sources", new SourceInfo()
+                MetadataConstants.MAP_KEY_ANSWER, MessageConstants.MSG_NO_RELEVANT_INFO,
+                MetadataConstants.MAP_KEY_SOURCES, new SourceInfo()
             );
         }
 
         Set<String> processedChunks = new HashSet<>();
         List<SourceInfo> sources = relevantDocuments.stream()
             .filter(doc -> {
-                String filename = doc.getMetadata().getOrDefault("filename", "알 수 없음").toString();
-                return !filename.equals("README.md");
+                String filename = doc.getMetadata().getOrDefault(MetadataConstants.METADATA_FILENAME, MetadataConstants.UNKNOWN).toString();
+                return !filename.equals(MessageConstants.README_FILENAME);
             })
             .filter(doc -> {
-                String filename = doc.getMetadata().getOrDefault("filename", "").toString();
+                String filename = doc.getMetadata().getOrDefault(MetadataConstants.METADATA_FILENAME, "").toString();
                 Double score = doc.getScore();
                 
                 String contentHash = String.valueOf(doc.getText().hashCode());
@@ -174,41 +162,26 @@ public class SearchService {
         
         if (context.trim().isEmpty()) {
             return Map.of(
-                "answer", "관련 정보를 찾을 수 없습니다.",
-                "sources", new SourceInfo()
+                MetadataConstants.MAP_KEY_ANSWER, MessageConstants.MSG_NO_RELEVANT_INFO_FOUND,
+                MetadataConstants.MAP_KEY_SOURCES, new SourceInfo()
             );
         }
         
-        String prompt = String.format("""
-            당신은 한국어 AI 어시스턴트입니다. 반드시 한국어로만 답변하세요.
-            
-            [중요] 각 정보의 출처를 문장 끝에 [번호]로 반드시 표시해야 합니다.
-            
-            [문서 내용]
-            %s
-            
-            [질문]
-            %s
-            
-            [답변 형식 예시]
-            맛있는 신문은 기사를 다 읽고 나면 먹을 수 있어요[1]. 경제면은 스테이크 맛이 납니다[1].
-            
-            답변:
-            """, context, query);
+        String prompt = PromptTemplate.createSearchWithSourcesPrompt(context, query);
 
         try {
             String answer = chatModel.call(prompt);
             SourceInfo bestSource = findBestMatchingSource(answer, relevantDocuments);
             
             return Map.of(
-                "answer", answer,
-                "sources", bestSource
+                MetadataConstants.MAP_KEY_ANSWER, answer,
+                MetadataConstants.MAP_KEY_SOURCES, bestSource
             );
         } catch (Exception e) {
             SourceInfo bestSource = sources.isEmpty() ? new SourceInfo() : sources.get(0);
             return Map.of(
-                "answer", "AI 답변 생성 중 오류: " + e.getMessage(),
-                "sources", bestSource
+                MetadataConstants.MAP_KEY_ANSWER, MessageConstants.MSG_AI_ANSWER_ERROR + e.getMessage(),
+                MetadataConstants.MAP_KEY_SOURCES, bestSource
             );
         }
     }
@@ -226,79 +199,20 @@ public class SearchService {
         }
         
         SourceInfo bestSource = new SourceInfo();
-        double bestRelevanceScore = 0.0;
         
         for (int refNum : refNumbers) {
             int docIndex = refNum - 1;
             if (docIndex >= 0 && docIndex < documents.size()) {
                 Document candidateDoc = documents.get(docIndex);
-                double relevanceScore = calculateRelevanceScore(candidateDoc.getText());
+                SourceInfo sourceInfo = SourceInfo.fromDocument(candidateDoc);
                 
-                if (relevanceScore > bestRelevanceScore) {
-                    bestRelevanceScore = relevanceScore;
-                    bestSource = SourceInfo.fromDocument(candidateDoc);
+                if (sourceInfo.getFilename() != null && !sourceInfo.getFilename().isEmpty()) {
+                    bestSource = sourceInfo;
+                    break;
                 }
-            }
-        }
-        
-        if (bestRelevanceScore > 0) {
-            return bestSource;
-        }
-        
-        return findBestMatchingSourceByContent(answer, documents);
-    }
-    
-    /**
-     * 문서 관련성 점수 계산
-     */
-    private double calculateRelevanceScore(String content) {
-        double score = 0.0;
-        String[] keywords = {"맛있는 신문", "신문", "기사", "경제면", "스테이크", "욕조물", "보관"};
-        for (String keyword : keywords) {
-            if (content.contains(keyword)) {
-                score += 1.0;
-            }
-        }
-        return score;
-    }
-    
-    /**
-     * 기존 방식: 내용 기반 출처 매칭 (fallback용)
-     */
-    private SourceInfo findBestMatchingSourceByContent(String answer, List<Document> documents) {
-        SourceInfo bestSource = new SourceInfo();
-        double maxScore = 0.0;
-        
-        for (Document doc : documents) {
-            double score = calculateContentSimilarity(answer, doc.getText());
-            if (score > maxScore) {
-                maxScore = score;
-                bestSource = SourceInfo.fromDocument(doc);
             }
         }
         
         return bestSource;
-    }
-    
-    /**
-     * 답변과 문서 내용의 유사도 계산
-     */
-    private double calculateContentSimilarity(String answer, String document) {
-        String[] answerWords = answer.toLowerCase().replaceAll("[^가-힣a-z0-9\\s]", "").split("\\s+");
-        String[] docWords = document.toLowerCase().replaceAll("[^가-힣a-z0-9\\s]", "").split("\\s+");
-        
-        int matchCount = 0;
-        for (String answerWord : answerWords) {
-            if (answerWord.length() > 1) {
-                for (String docWord : docWords) {
-                    if (docWord.contains(answerWord) || answerWord.contains(docWord)) {
-                        matchCount++;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        return answerWords.length > 0 ? (double) matchCount / answerWords.length : 0.0;
     }
 }

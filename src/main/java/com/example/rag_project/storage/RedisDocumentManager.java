@@ -1,6 +1,7 @@
 package com.example.rag_project.storage;
 
-import com.example.rag_project.constants.RagConstants;
+import com.example.rag_project.constants.RedisConstants;
+import com.example.rag_project.constants.MetadataConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -54,10 +55,10 @@ public class RedisDocumentManager {
     private final RedisTemplate<String, Object> redisTemplate;
     
     /** Redis 문서 키 접두사 */
-    private static final String DOCUMENT_KEY_PREFIX = RagConstants.REDIS_DOCUMENT_KEY_PREFIX;
+    private static final String DOCUMENT_KEY_PREFIX = RedisConstants.REDIS_DOCUMENT_KEY_PREFIX;
     
     /** 메타데이터 필드명 상수들 */
-    private static final String METADATA_SAVED_AT = RagConstants.METADATA_SAVED_AT;
+    private static final String METADATA_SAVED_AT = MetadataConstants.METADATA_SAVED_AT;
     
     /**
      * Redis에 저장된 모든 문서 키 목록 조회

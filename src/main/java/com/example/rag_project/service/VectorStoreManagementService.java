@@ -1,6 +1,10 @@
 package com.example.rag_project.service;
 
-import com.example.rag_project.constants.RagConstants;
+import com.example.rag_project.constants.ConfigConstants;
+import com.example.rag_project.constants.ErrorConstants;
+import com.example.rag_project.constants.MetadataConstants;
+import com.example.rag_project.constants.MessageConstants;
+import com.example.rag_project.constants.RedisConstants;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -18,31 +22,32 @@ import java.util.*;
 /**
  * 벡터 저장소 관리 전담 서비스
  * 
- * <p>이 클래스는 RAG 시스템의 벡터 저장소 관리와 관련된 모든 작업을 담당합니다:</p>
+ * <p>이 클래스는 RAG 시스템의 벡터 저장소 관련 모든 작업을 담당합니다:</p>
  * <ul>
- *   <li>벡터 저장소 초기화 및 상태 관리</li>
- *   <li>Redis 데이터 정리 (Spring AI 추상화 계층 활용)</li>
- *   <li>시스템 상태 확인 및 정보 제공</li>
- *   <li>문서 로딩 후 상태 추적</li>
+ *   <li>벡터 저장소 초기화 및 정리</li>
+ *   <li>Redis 데이터 로드 및 관리</li>
+ *   <li>시스템 상태 모니터링</li>
+ *   <li>파일 시스템과 동기화</li>
  * </ul>
  * 
  * <p><b>주요 책임:</b></p>
  * <ul>
  *   <li>VectorStore를 통한 벡터 데이터 관리</li>
- *   <li>RedisTemplate을 통한 안전한 데이터 정리</li>
- *   <li>설정 기반의 유연한 키 관리</li>
+ *   <li>RedisTemplate을 통한 Redis 키 관리</li>
+ *   <li>DocumentProcessingService와의 협업</li>
+ *   <li>시스템 초기화 상태 추적</li>
  * </ul>
  * 
  * <p><b>설정값:</b></p>
  * <ul>
  *   <li>{@code rag.documents.folder}: 문서 폴더 경로</li>
  *   <li>{@code rag.redis.vectorstore.index-name}: 벡터 인덱스 이름</li>
- *   <li>{@code rag.redis.vectorstore.key-prefix}: RAG 키 접두사</li>
- *   <li>{@code rag.redis.vectorstore.embedding-prefix}: 임베딩 키 접두사</li>
+ *   <li>{@code rag.redis.vectorstore.key-prefix}: Redis 키 접두사</li>
  * </ul>
  * 
  * <p><b>의존성:</b> VectorStore, DocumentProcessingService, RedisTemplate</p>
  */
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -52,16 +57,16 @@ public class VectorStoreManagementService {
     private final DocumentProcessingService documentProcessingService;
     private final RedisTemplate<String, Object> redisTemplate;
 
-    @Value("${" + RagConstants.CONFIG_DOCUMENTS_FOLDER + ":" + RagConstants.DEFAULT_DOCUMENTS_FOLDER + "}")
+    @Value("${" + ConfigConstants.CONFIG_DOCUMENTS_FOLDER + ":" + ConfigConstants.DEFAULT_DOCUMENTS_FOLDER + "}")
     private String documentsFolder;
 
-    @Value("${" + RagConstants.CONFIG_VECTORSTORE_INDEX_NAME + ":" + RagConstants.VECTOR_INDEX_NAME + "}")
+    @Value("${" + ConfigConstants.CONFIG_VECTORSTORE_INDEX_NAME + ":" + RedisConstants.VECTOR_INDEX_NAME + "}")
     private String indexName;
 
-    @Value("${" + RagConstants.CONFIG_VECTORSTORE_KEY_PREFIX + ":" + RagConstants.REDIS_KEY_PREFIX + "}")
+    @Value("${" + ConfigConstants.CONFIG_VECTORSTORE_KEY_PREFIX + ":" + RedisConstants.REDIS_KEY_PREFIX + "}")
     private String keyPrefix;
 
-    @Value("${" + RagConstants.CONFIG_VECTORSTORE_EMBEDDING_PREFIX + ":" + RagConstants.REDIS_EMBEDDING_KEY_PREFIX + "}")
+    @Value("${" + ConfigConstants.CONFIG_VECTORSTORE_EMBEDDING_PREFIX + ":" + RedisConstants.REDIS_EMBEDDING_KEY_PREFIX + "}")
     private String embeddingPrefix;
 
     private boolean isInitialized = false;
@@ -79,11 +84,11 @@ public class VectorStoreManagementService {
             // 2. VectorStore를 통한 벡터 데이터 삭제 (Spring AI 추상화)
             clearVectorStoreData();
             
-            log.info(RagConstants.LOG_VECTORSTORE_INITIALIZED);
+            log.info("벡터 저장소가 초기화되었습니다.");
             
         } catch (Exception e) {
-            log.error(RagConstants.ERROR_VECTORSTORE_INIT_FAILED + e.getMessage());
-            throw new RuntimeException("벡터 저장소 초기화 중 오류 발생", e);
+            log.error(ErrorConstants.ERROR_VECTORSTORE_INIT_FAILED + e.getMessage());
+            throw new RuntimeException(MessageConstants.MSG_VECTORSTORE_INIT_ERROR, e);
         }
     }
     
@@ -96,18 +101,18 @@ public class VectorStoreManagementService {
             Set<String> ragKeys = redisTemplate.keys(keyPrefix + "*");
             if (ragKeys != null && !ragKeys.isEmpty()) {
                 redisTemplate.delete(ragKeys);
-                log.info(RagConstants.LOG_REDIS_KEYS_DELETED, ragKeys.size());
+                log.info("RAG 관련 키 {}개 삭제 완료", ragKeys.size());
             }
             
             // Embedding 관련 키 삭제
             Set<String> embeddingKeys = redisTemplate.keys(embeddingPrefix + "*");
             if (embeddingKeys != null && !embeddingKeys.isEmpty()) {
                 redisTemplate.delete(embeddingKeys);
-                log.info(RagConstants.LOG_EMBEDDING_KEYS_DELETED, embeddingKeys.size());
+                log.info("Embedding 관련 키 {}개 삭제 완료", embeddingKeys.size());
             }
             
         } catch (Exception e) {
-            log.warn("Redis 키 삭제 중 오류: {}", e.getMessage());
+            log.warn(MessageConstants.MSG_REDIS_KEY_DELETE_ERROR, e.getMessage());
         }
     }
     
@@ -122,7 +127,7 @@ public class VectorStoreManagementService {
             log.debug("VectorStore 데이터 정리 완료");
             
         } catch (Exception e) {
-            log.warn("VectorStore 데이터 정리 중 오류: {}", e.getMessage());
+            log.warn(MessageConstants.MSG_VECTORSTORE_CLEAN_ERROR, e.getMessage());
         }
     }
 
@@ -147,7 +152,7 @@ public class VectorStoreManagementService {
             }
             
         } catch (Exception e) {
-            log.error("Redis 벡터 저장소 상태 확인 실패: {}", e.getMessage());
+            log.error(ErrorConstants.LOG_REDIS_VECTORSTORE_STATUS_FAILED, e.getMessage());
             isInitialized = false;
         }
     }
@@ -168,7 +173,7 @@ public class VectorStoreManagementService {
                 return true;
             }
         } catch (Exception e) {
-            log.warn("Redis 상태 확인 중 오류: {}", e.getMessage());
+            log.warn(ErrorConstants.LOG_REDIS_STATUS_CHECK_ERROR, e.getMessage());
         }
         
         return false;
@@ -179,21 +184,21 @@ public class VectorStoreManagementService {
      */
     public Map<String, Object> getStatusWithFiles() {
         Map<String, Object> status = new HashMap<>();
-        status.put("isInitialized", isInitialized());
+        status.put(MetadataConstants.MAP_KEY_IS_INITIALIZED, isInitialized());
         
         if (isInitialized()) {
             int vectorStoreCount = 0;
             Set<String> loadedFiles = new HashSet<>();
             
             try {
-                String currentDir = System.getProperty("user.dir");
+                String currentDir = System.getProperty(ConfigConstants.SYSTEM_USER_DIR);
                 Path documentsPath = Paths.get(currentDir, documentsFolder);
                 
                 if (Files.exists(documentsPath)) {
                     Files.list(documentsPath)
                         .filter(path -> {
                             String fileName = path.getFileName().toString().toLowerCase();
-                            return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                            return fileName.endsWith(ConfigConstants.TXT_EXTENSION) || fileName.endsWith(ConfigConstants.MD_EXTENSION);
                         })
                         .forEach(path -> {
                             loadedFiles.add(path.getFileName().toString());
@@ -202,24 +207,24 @@ public class VectorStoreManagementService {
                     vectorStoreCount = loadedFiles.size() * 3;
                 }
             } catch (Exception e) {
-                log.error("문서 상태 확인 실패: {}", e.getMessage());
+                log.error(ErrorConstants.LOG_DOCUMENT_STATUS_CHECK_FAILED, e.getMessage());
                 vectorStoreCount = 0;
             }
             
             List<String> redisKeys = documentProcessingService.getAllRedisDocumentKeys();
             if (!redisKeys.isEmpty()) {
-                log.info("Redis에서 {}개의 문서 키를 찾았습니다", redisKeys.size());
+                log.info("Redis에 {}개의 문서 키를 찾았습니다", redisKeys.size());
                 
                 for (String key : redisKeys) {
                     try {
                         Map<String, Object> doc = documentProcessingService.getRedisDocument(key);
                         
-                        if (doc.containsKey("metadata")) {
-                            Object metadata = doc.get("metadata");
+                        if (doc.containsKey(MetadataConstants.JSON_KEY_METADATA)) {
+                            Object metadata = doc.get(MetadataConstants.JSON_KEY_METADATA);
                             
                             if (metadata instanceof Map) {
                                 Map<?, ?> metaMap = (Map<?, ?>) metadata;
-                                Object filename = metaMap.get("filename");
+                                Object filename = metaMap.get(MetadataConstants.JSON_KEY_FILENAME);
                                 if (filename != null) {
                                     loadedFiles.add(filename.toString());
                                 }
@@ -228,30 +233,30 @@ public class VectorStoreManagementService {
                                     com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                                     @SuppressWarnings("unchecked")
                                     Map<String, Object> metaMap = mapper.readValue((String) metadata, Map.class);
-                                    Object filename = metaMap.get("filename");
+                                    Object filename = metaMap.get(MetadataConstants.JSON_KEY_FILENAME);
                                     if (filename != null) {
                                         loadedFiles.add(filename.toString());
                                     }
                                 } catch (Exception jsonEx) {
-                                    log.warn("메타데이터 JSON 파싱 실패: {}", jsonEx.getMessage());
+                                    log.warn(ErrorConstants.LOG_METADATA_JSON_PARSE_FAILED, jsonEx.getMessage());
                                 }
                             }
                         }
                     } catch (Exception e) {
-                        log.error("문서 처리 실패 ({}): {}", key, e.getMessage());
+                        log.error(ErrorConstants.LOG_DOCUMENT_PROCESS_FAILED, key, e.getMessage());
                     }
                 }
                 
                 vectorStoreCount = Math.max(vectorStoreCount, redisKeys.size());
             }
             
-            status.put("loadedFiles", new ArrayList<>(loadedFiles));
-            status.put("documentCount", vectorStoreCount);
-            status.put("message", "문서가 로드되어 있습니다. (벡터 저장소 기준)");
+            status.put(MetadataConstants.MAP_KEY_LOADED_FILES, new ArrayList<>(loadedFiles));
+            status.put(MetadataConstants.MAP_KEY_DOCUMENT_COUNT, vectorStoreCount);
+            status.put(MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_DOCUMENTS_LOADED);
         } else {
-            status.put("loadedFiles", new ArrayList<>());
-            status.put("documentCount", 0);
-            status.put("message", "문서가 로드되지 않았습니다.");
+            status.put(MetadataConstants.MAP_KEY_LOADED_FILES, new ArrayList<>());
+            status.put(MetadataConstants.MAP_KEY_DOCUMENT_COUNT, 0);
+            status.put(MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_DOCUMENTS_NOT_LOADED);
         }
         
         return status;
@@ -276,24 +281,24 @@ public class VectorStoreManagementService {
             
             clearStore();
             
-            String currentDir = System.getProperty("user.dir");
-            String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
+            String currentDir = System.getProperty(ConfigConstants.SYSTEM_USER_DIR);
+            String projectDocumentsPath = Paths.get(currentDir, ConfigConstants.DOCUMENTS_FOLDER_NAME).toString();
             log.info("문서 경로: {}", projectDocumentsPath);
             
             documentProcessingService.loadDocumentsFromFolder(projectDocumentsPath);
             
-            result.put("success", true);
-            result.put("message", "파일에서 Redis로 문서 로드가 완료되었습니다.");
-            result.put("documentCount", documentProcessingService.getAllRedisDocumentKeys().size());
+            result.put(MetadataConstants.MAP_KEY_SUCCESS, true);
+            result.put(MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_FILE_LOAD_SUCCESS);
+            result.put(MetadataConstants.MAP_KEY_DOCUMENT_COUNT, documentProcessingService.getAllRedisDocumentKeys().size());
             
         } catch (IOException e) {
-            log.error("파일에서 Redis로 데이터 로드 실패: {}", e.getMessage());
-            result.put("success", false);
-            result.put("message", "로드 실패: " + e.getMessage());
+            log.error(ErrorConstants.LOG_FILE_LOAD_FAILED, e.getMessage());
+            result.put(MetadataConstants.MAP_KEY_SUCCESS, false);
+            result.put(MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_FILE_LOAD_FAILED_PREFIX + e.getMessage());
         } catch (Exception e) {
-            log.error("예상치 못한 오류: {}", e.getMessage());
-            result.put("success", false);
-            result.put("message", "오류 발생: " + e.getMessage());
+            log.error(ErrorConstants.LOG_UNEXPECTED_ERROR, e.getMessage());
+            result.put(MetadataConstants.MAP_KEY_SUCCESS, false);
+            result.put(MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_ERROR_PREFIX + e.getMessage());
         }
         
         return result;
@@ -307,16 +312,16 @@ public class VectorStoreManagementService {
             List<Map<String, Object>> redisDocuments = documentProcessingService.getAllRedisDocuments();
             
             if (redisDocuments.isEmpty()) {
-                log.info("Redis에 저장된 문서가 없습니다.");
+                log.info(MessageConstants.MSG_REDIS_NO_DOCUMENTS);
                 return;
             }
             
             List<org.springframework.ai.document.Document> documents = new ArrayList<>();
             
             for (Map<String, Object> redisDoc : redisDocuments) {
-                String content = (String) redisDoc.get("content");
+                String content = (String) redisDoc.get(MetadataConstants.JSON_KEY_CONTENT);
                 @SuppressWarnings("unchecked")
-                Map<String, Object> metadata = (Map<String, Object>) redisDoc.get("metadata");
+                Map<String, Object> metadata = (Map<String, Object>) redisDoc.get(MetadataConstants.JSON_KEY_METADATA);
                 
                 if (content != null && !content.trim().isEmpty()) {
                     org.springframework.ai.document.Document document = new org.springframework.ai.document.Document(content, metadata);
@@ -327,12 +332,12 @@ public class VectorStoreManagementService {
             if (!documents.isEmpty()) {
                 vectorStore.add(documents);
                 markAsInitialized();
-                log.info("Redis에서 {}개 문서를 벡터 저장소에 로드했습니다.", documents.size());
+                log.info(MessageConstants.MSG_REDIS_LOAD_SUCCESS, documents.size());
             }
             
         } catch (Exception e) {
-            log.error("Redis 문서 로드 실패: {}", e.getMessage());
-            throw new RuntimeException("Redis 문서 로드 중 오류 발생", e);
+            log.error(ErrorConstants.ERROR_REDIS_LOAD_FAILED, e.getMessage());
+            throw new RuntimeException(MessageConstants.MSG_REDIS_LOAD_ERROR, e);
         }
     }
 }

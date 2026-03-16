@@ -1,5 +1,9 @@
 package com.example.rag_project.service;
 
+import com.example.rag_project.constants.ConfigConstants;
+import com.example.rag_project.constants.ErrorConstants;
+import com.example.rag_project.constants.MetadataConstants;
+import com.example.rag_project.constants.MessageConstants;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.TextReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
@@ -14,6 +18,7 @@ import com.example.rag_project.splitter.TextSplitterFactory;
 import com.example.rag_project.storage.RedisDocumentManager;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,20 +54,21 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentProcessingService {
 
     private final ResourceLoader resourceLoader;
     private final VectorStore vectorStore;
     private final RedisDocumentManager redisDocumentManager;
 
-    @Value("${rag.documents.folder:documents}")
+    @Value("${" + ConfigConstants.CONFIG_DOCUMENTS_FOLDER + ":" + ConfigConstants.DEFAULT_DOCUMENTS_FOLDER + "}")
     private String documentsFolder;
 
     /**
      * 텍스트 파일을 읽어서 벡터 저장소에 로드하는 메서드
      */
     public void loadTextFile(String filePath) throws IOException {
-        Resource resource = resourceLoader.getResource("classpath:" + filePath);
+        Resource resource = resourceLoader.getResource(ConfigConstants.RESOURCE_CLASSPATH_PREFIX + filePath);
         TextReader textReader = new TextReader(resource);
         
         List<Document> documents = textReader.get();
@@ -115,8 +121,8 @@ public class DocumentProcessingService {
      * 현재 documents 폴더의 모든 문서를 Redis에 저장하는 메서드
      */
     public Map<String, Object> saveDocumentsToRedis() throws IOException {
-        String currentDir = System.getProperty("user.dir");
-        String projectDocumentsPath = Paths.get(currentDir, "documents").toString();
+        String currentDir = System.getProperty(ConfigConstants.SYSTEM_USER_DIR);
+        String projectDocumentsPath = Paths.get(currentDir, ConfigConstants.DOCUMENTS_FOLDER_NAME).toString();
         
         return saveDocumentsFromFolderToRedisWithDuplicateCheck(projectDocumentsPath);
     }
@@ -129,10 +135,10 @@ public class DocumentProcessingService {
         
         if (!Files.exists(folder)) {
             return Map.of(
-                "savedCount", 0,
-                "duplicateCount", 0,
-                "totalCount", 0,
-                "message", "폴더가 존재하지 않습니다."
+                MetadataConstants.MAP_KEY_SAVED_COUNT, 0,
+                MetadataConstants.MAP_KEY_DUPLICATE_COUNT, 0,
+                MetadataConstants.MAP_KEY_TOTAL_COUNT, 0,
+                MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_FOLDER_NOT_EXISTS
             );
         }
 
@@ -142,7 +148,7 @@ public class DocumentProcessingService {
             List<Document> splitDocuments = TextSplitterFactory.createDefault().apply(allDocuments);
             Map<String, Object> saveResult = redisDocumentManager.saveDocuments(splitDocuments);
             
-            if ((Integer) saveResult.get("savedCount") > 0) {
+            if ((Integer) saveResult.get(MetadataConstants.MAP_KEY_SAVED_COUNT) > 0) {
                 vectorStore.add(splitDocuments);
             }
             
@@ -150,10 +156,10 @@ public class DocumentProcessingService {
         }
         
         return Map.of(
-            "savedCount", 0,
-            "duplicateCount", 0,
-            "totalCount", 0,
-            "message", "폴더에 텍스트 파일이 없습니다."
+            MetadataConstants.MAP_KEY_SAVED_COUNT, 0,
+            MetadataConstants.MAP_KEY_DUPLICATE_COUNT, 0,
+            MetadataConstants.MAP_KEY_TOTAL_COUNT, 0,
+            MetadataConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_NO_TEXT_FILES
         );
     }
 
@@ -161,12 +167,12 @@ public class DocumentProcessingService {
     private Path getFolderPath(String folderPath) {
         return Paths.get(folderPath).isAbsolute() ? 
             Paths.get(folderPath) : 
-            Paths.get(System.getProperty("user.dir"), folderPath);
+            Paths.get(System.getProperty(ConfigConstants.SYSTEM_USER_DIR), folderPath);
     }
 
     private void createDefaultFolder(Path folder) throws IOException {
-        String currentDir = System.getProperty("user.dir");
-        folder = Paths.get(currentDir, "documents");
+        String currentDir = System.getProperty(ConfigConstants.SYSTEM_USER_DIR);
+        folder = Paths.get(currentDir, ConfigConstants.DOCUMENTS_FOLDER_NAME);
         
         if (!Files.exists(folder)) {
             Files.createDirectories(folder);
@@ -180,14 +186,14 @@ public class DocumentProcessingService {
         Files.list(folder)
             .filter(path -> {
                 String fileName = path.getFileName().toString().toLowerCase();
-                return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                return fileName.endsWith(ConfigConstants.TXT_EXTENSION) || fileName.endsWith(ConfigConstants.MD_EXTENSION);
             })
             .forEach(path -> {
                 try {
                     String content = Files.readString(path);
                     Map<String, Object> baseMetadata = new HashMap<>();
-                    baseMetadata.put("filename", path.getFileName().toString());
-                    baseMetadata.put("filepath", path.toString());
+                    baseMetadata.put(MetadataConstants.METADATA_FILENAME, path.getFileName().toString());
+                    baseMetadata.put(MetadataConstants.METADATA_FILEPATH, path.toString());
                     
                     HierarchicalParser parser = new HierarchicalParser();
                     List<Document> parsedDocuments = parser.parse(content, baseMetadata);
@@ -207,7 +213,7 @@ public class DocumentProcessingService {
                     
                     allDocuments.addAll(finalDocuments);
                 } catch (Exception e) {
-                    // 에러 로깅
+                    log.error(ErrorConstants.LOG_DOCUMENT_PROCESS_FAILED, path.getFileName().toString(), e.getMessage());
                 }
             });
             
@@ -220,9 +226,9 @@ public class DocumentProcessingService {
         
         for (Document originalDoc : allDocuments) {
             Map<String, Object> metadata = new HashMap<>(originalDoc.getMetadata());
-            String uniqueId = originalDoc.getMetadata().getOrDefault("filename", "알수없음") + "_" + globalChunkIndex;
-            metadata.put("chunk_id", uniqueId);
-            metadata.put("file_chunk_index", globalChunkIndex);
+            String uniqueId = originalDoc.getMetadata().getOrDefault(MetadataConstants.METADATA_FILENAME, MetadataConstants.UNKNOWN) + "_" + globalChunkIndex;
+            metadata.put(MetadataConstants.METADATA_CHUNK_ID, uniqueId);
+            metadata.put(MetadataConstants.METADATA_FILE_CHUNK_INDEX, globalChunkIndex);
             
             finalDocuments.add(new Document(originalDoc.getText(), metadata));
             globalChunkIndex++;
@@ -237,15 +243,15 @@ public class DocumentProcessingService {
         Files.list(folder)
             .filter(path -> {
                 String fileName = path.getFileName().toString().toLowerCase();
-                return fileName.endsWith(".txt") || fileName.endsWith(".md");
+                return fileName.endsWith(ConfigConstants.TXT_EXTENSION) || fileName.endsWith(ConfigConstants.MD_EXTENSION);
             })
             .forEach(path -> {
                 try {
                     String content = Files.readString(path);
                     Document document = new Document(content, 
-                        Map.of("filename", path.getFileName().toString(), 
-                               "filepath", path.toString(),
-                               "saved_at", java.time.LocalDateTime.now().toString()));
+                        Map.of(MetadataConstants.METADATA_FILENAME, path.getFileName().toString(), 
+                               MetadataConstants.METADATA_FILEPATH, path.toString(),
+                               MetadataConstants.METADATA_SAVED_AT, java.time.LocalDateTime.now().toString()));
                     allDocuments.add(document);
                 } catch (IOException e) {
                     // 에러 로깅
@@ -256,18 +262,18 @@ public class DocumentProcessingService {
     }
 
     private Map<String, Object> createSaveResult(List<Document> allDocuments, List<Document> splitDocuments, Map<String, Object> saveResult) {
-        int savedCount = (Integer) saveResult.get("savedCount");
-        int duplicateCount = (Integer) saveResult.get("duplicateCount");
+        int savedCount = (Integer) saveResult.get(MetadataConstants.MAP_KEY_SAVED_COUNT);
+        int duplicateCount = (Integer) saveResult.get(MetadataConstants.MAP_KEY_DUPLICATE_COUNT);
         
-        String message = String.format("총 %d개 파일 처리 완료: %d개 저장, %d개 중복", 
+        String message = String.format(MessageConstants.MSG_FILES_PROCESSED, 
                                        allDocuments.size(), savedCount, duplicateCount);
         
         return Map.of(
-            "savedCount", savedCount,
-            "duplicateCount", duplicateCount,
-            "totalCount", splitDocuments.size(),
-            "originalFileCount", allDocuments.size(),
-            "message", message
+            MetadataConstants.MAP_KEY_SAVED_COUNT, savedCount,
+            MetadataConstants.MAP_KEY_DUPLICATE_COUNT, duplicateCount,
+            MetadataConstants.MAP_KEY_TOTAL_COUNT, splitDocuments.size(),
+            MetadataConstants.MAP_KEY_ORIGINAL_FILE_COUNT, allDocuments.size(),
+            MetadataConstants.MAP_KEY_MESSAGE, message
         );
     }
 }

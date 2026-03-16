@@ -1,6 +1,6 @@
 package com.example.rag_project.dto;
 
-import com.example.rag_project.constants.RagConstants;
+import com.example.rag_project.constants.MetadataConstants;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,11 +22,11 @@ public class SourceInfo {
         Map<String, Object> metadata = document.getMetadata();
 
         // 메타데이터에서 파일명 추출
-        String filename = metadata.getOrDefault(RagConstants.METADATA_FILENAME, "").toString();
+        String filename = metadata.getOrDefault(MetadataConstants.METADATA_FILENAME, "").toString();
         
         // 메타데이터에 파일명이 없으면 기본값 설정
-        if (filename.isEmpty() || filename.equals(RagConstants.UNKNOWN)) {
-            filename = RagConstants.UNKNOWN_FILENAME;
+        if (filename.isEmpty() || filename.equals(MetadataConstants.UNKNOWN)) {
+            filename = MetadataConstants.UNKNOWN_FILENAME;
         }
         
         source.setFilename(filename);
@@ -67,7 +67,7 @@ public class SourceInfo {
         Double score = document.getScore();
         source.setSimilarityScore(score != null ? Double.parseDouble(new DecimalFormat("#.##").format(score)) : 0.0);
         
-        Object chunkId = metadata.get(RagConstants.METADATA_CHUNK_ID);
+        Object chunkId = metadata.get(MetadataConstants.METADATA_CHUNK_ID);
         source.setChunkId(chunkId != null ? String.valueOf(chunkId) : null);
 
         return source;

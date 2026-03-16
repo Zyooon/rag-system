@@ -1,6 +1,5 @@
 package com.example.rag_project.service;
 
-import com.example.rag_project.constants.RagConstants;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
@@ -52,7 +51,7 @@ public class RagService {
     public void loadDocumentsFromFolder(String folderPath) throws IOException {
         documentProcessingService.loadDocumentsFromFolder(folderPath);
         vectorStoreService.markAsInitialized();
-        log.info(RagConstants.LOG_DOCUMENTS_LOADED, folderPath);
+        log.info("문서 로드 완료: {}, 시스템 초기화됨", folderPath);
     }
     
     /**
@@ -61,7 +60,7 @@ public class RagService {
     public void loadTextFile(String filePath) throws IOException {
         documentProcessingService.loadTextFile(filePath);
         vectorStoreService.markAsInitialized();
-        log.info(RagConstants.LOG_DOCUMENTS_LOADED, filePath);
+        log.info("문서 로드 완료: {}, 시스템 초기화됨", filePath);
     }
 
     // === Document Processing Methods (위임) ===

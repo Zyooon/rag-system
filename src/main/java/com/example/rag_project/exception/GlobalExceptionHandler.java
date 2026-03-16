@@ -6,8 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.context.request.WebRequest;
+import com.example.rag_project.constants.ErrorConstants;
 
+import org.springframework.web.context.request.WebRequest;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,12 +25,12 @@ public class GlobalExceptionHandler {
 
         // 클라이언트에게 보낼 응답 생성
         Map<String, Object> errorResponse = new HashMap<>();
-        errorResponse.put("success", false);
-        errorResponse.put("timestamp", LocalDateTime.now().toString());
-        errorResponse.put("error", "Internal Server Error");
-        errorResponse.put("message", ex.getMessage());
-        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
-        errorResponse.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_SUCCESS, false);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_TIMESTAMP, LocalDateTime.now().toString());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_ERROR, ErrorConstants.ERROR_TYPE_INTERNAL_SERVER);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_MESSAGE, ex.getMessage());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_PATH, request.getDescription(false).replace("uri=", ""));
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_STATUS, HttpStatus.INTERNAL_SERVER_ERROR.value());
 
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -41,12 +42,12 @@ public class GlobalExceptionHandler {
 
         // 클라이언트에게 보낼 응답 생성
         Map<String, Object> errorResponse = new HashMap<>();
-        errorResponse.put("success", false);
-        errorResponse.put("timestamp", LocalDateTime.now().toString());
-        errorResponse.put("error", "Runtime Error");
-        errorResponse.put("message", ex.getMessage());
-        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
-        errorResponse.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_SUCCESS, false);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_TIMESTAMP, LocalDateTime.now().toString());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_ERROR, ErrorConstants.ERROR_TYPE_RUNTIME);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_MESSAGE, ex.getMessage());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_PATH, request.getDescription(false).replace("uri=", ""));
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_STATUS, HttpStatus.INTERNAL_SERVER_ERROR.value());
 
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -58,12 +59,12 @@ public class GlobalExceptionHandler {
 
         // 클라이언트에게 보낼 응답 생성
         Map<String, Object> errorResponse = new HashMap<>();
-        errorResponse.put("success", false);
-        errorResponse.put("timestamp", LocalDateTime.now().toString());
-        errorResponse.put("error", "RAG Service Error");
-        errorResponse.put("message", ex.getMessage());
-        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
-        errorResponse.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_SUCCESS, false);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_TIMESTAMP, LocalDateTime.now().toString());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_ERROR, ErrorConstants.ERROR_TYPE_RAG_SERVICE);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_MESSAGE, ex.getMessage());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_PATH, request.getDescription(false).replace("uri=", ""));
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_STATUS, HttpStatus.INTERNAL_SERVER_ERROR.value());
 
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -75,12 +76,12 @@ public class GlobalExceptionHandler {
 
         // 클라이언트에게 보낼 응답 생성
         Map<String, Object> errorResponse = new HashMap<>();
-        errorResponse.put("success", false);
-        errorResponse.put("timestamp", LocalDateTime.now().toString());
-        errorResponse.put("error", "Invalid Argument");
-        errorResponse.put("message", ex.getMessage());
-        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
-        errorResponse.put("status", HttpStatus.BAD_REQUEST.value());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_SUCCESS, false);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_TIMESTAMP, LocalDateTime.now().toString());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_ERROR, ErrorConstants.ERROR_TYPE_INVALID_ARGUMENT);
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_MESSAGE, ex.getMessage());
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_PATH, request.getDescription(false).replace("uri=", ""));
+        errorResponse.put(ErrorConstants.RESPONSE_KEY_STATUS, HttpStatus.BAD_REQUEST.value());
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
