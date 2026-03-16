@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.example.rag_project.dto.SourceInfo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -48,10 +49,12 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SearchService {
 
     private final VectorStore vectorStore;
     private final ChatModel chatModel;
+    private final DocumentProcessingService documentProcessingService;
 
     @Value("${" + ConfigConstants.CONFIG_SEARCH_THRESHOLD + ":" + ConfigConstants.DEFAULT_SEARCH_THRESHOLD + "}")
     private double similarityThreshold;
@@ -150,12 +153,34 @@ public class SearchService {
                 return true;
             })
             .limit(5)
-            .map(doc -> SourceInfo.fromDocument(doc))
+            .map(doc -> {
+                // 벡터 저장소 문서의 메타데이터가 유실되었으므로, Redis에서 원본 문서를 찾아서 SourceInfo 생성
+                SourceInfo sourceInfo;
+                try {
+                    // 문서 내용으로 Redis에서 원본 문서 찾기
+                    List<Map<String, Object>> redisDocs = documentProcessingService.getAllRedisDocuments();
+                    sourceInfo = findSourceInfoFromRedis(doc.getText(), redisDocs);
+                } catch (Exception e) {
+                    log.warn("Failed to find source info from Redis, using fallback: {}", e.getMessage());
+                    sourceInfo = SourceInfo.fromDocument(doc);
+                }
+                
+                // 디버깅용 로그
+                log.debug("Document metadata: {}, filename: {}", doc.getMetadata(), sourceInfo.getFilename());
+                return sourceInfo;
+            })
             .collect(Collectors.toList());
+
+        log.debug("Sources list size: {}, first filename: {}", sources.size(), 
+            sources.isEmpty() ? "empty" : sources.get(0).getFilename());
 
         StringBuilder contextWithIndices = new StringBuilder();
         for (int i = 0; i < relevantDocuments.size(); i++) {
-            contextWithIndices.append(String.format("[%d] %s\n\n", i + 1, relevantDocuments.get(i).getText()));
+            org.springframework.ai.document.Document doc = relevantDocuments.get(i);
+            String filename = doc.getMetadata().getOrDefault(MetadataConstants.METADATA_FILENAME, MetadataConstants.UNKNOWN).toString();
+            String content = doc.getText();
+            
+            contextWithIndices.append(String.format("[%d] 파일명: %s\n내용: %s\n\n", i + 1, filename, content));
         }
         
         String context = contextWithIndices.toString();
@@ -171,7 +196,7 @@ public class SearchService {
 
         try {
             String answer = chatModel.call(prompt);
-            SourceInfo bestSource = findBestMatchingSource(answer, relevantDocuments);
+            SourceInfo bestSource = findBestMatchingSource(answer, relevantDocuments, sources);
             
             return Map.of(
                 MetadataConstants.MAP_KEY_ANSWER, answer,
@@ -189,7 +214,7 @@ public class SearchService {
     /**
      * 출처 재계산: 답변의 참조 번호를 기반으로 정확한 출처 찾기
      */
-    private SourceInfo findBestMatchingSource(String answer, List<Document> documents) {
+    private SourceInfo findBestMatchingSource(String answer, List<Document> documents, List<SourceInfo> sources) {
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\[(\\d+)\\]");
         java.util.regex.Matcher matcher = pattern.matcher(answer);
         
@@ -200,19 +225,118 @@ public class SearchService {
         
         SourceInfo bestSource = new SourceInfo();
         
+        // sources 리스트가 비어있으면 첫 번째 documents에서 SourceInfo 생성
+        if (sources.isEmpty()) {
+            log.debug("Sources list is empty, creating from first document");
+            if (!documents.isEmpty()) {
+                bestSource = SourceInfo.fromDocument(documents.get(0));
+                log.debug("Created SourceInfo from first document: {}", bestSource.getFilename());
+            }
+            return bestSource;
+        }
+        
+        log.debug("Found reference numbers: {}", refNumbers);
+        
         for (int refNum : refNumbers) {
             int docIndex = refNum - 1;
-            if (docIndex >= 0 && docIndex < documents.size()) {
-                Document candidateDoc = documents.get(docIndex);
-                SourceInfo sourceInfo = SourceInfo.fromDocument(candidateDoc);
+            if (docIndex >= 0 && docIndex < sources.size()) {
+                SourceInfo sourceInfo = sources.get(docIndex);
                 
-                if (sourceInfo.getFilename() != null && !sourceInfo.getFilename().isEmpty()) {
+                if (sourceInfo.getFilename() != null && !sourceInfo.getFilename().isEmpty() && 
+                    !sourceInfo.getFilename().equals(MetadataConstants.UNKNOWN_FILENAME)) {
                     bestSource = sourceInfo;
                     break;
                 }
             }
         }
         
+        // 적절한 출처를 찾지 못했다면 sources의 첫 번째 항목 사용
+        if (bestSource.getFilename() == null || bestSource.getFilename().isEmpty()) {
+            bestSource = sources.get(0);
+        }
+        
         return bestSource;
+    }
+
+    /**
+     * Redis에서 원본 문서를 찾아서 SourceInfo 생성
+     */
+    private SourceInfo findSourceInfoFromRedis(String content, List<Map<String, Object>> redisDocs) {
+        String normalizedContent = content.trim().toLowerCase();
+        double bestMatchScore = 0.0;
+        SourceInfo bestMatch = null;
+        
+        for (Map<String, Object> redisDoc : redisDocs) {
+            String redisContent = (String) redisDoc.get(MetadataConstants.JSON_KEY_CONTENT);
+            if (redisContent == null) continue;
+            
+            String normalizedRedisContent = redisContent.trim().toLowerCase();
+            
+            // 유사도 계산 (간단한 문자열 유사도)
+            double similarity = calculateContentSimilarity(normalizedContent, normalizedRedisContent);
+            
+            if (similarity > bestMatchScore && similarity > 0.3) { // 30% 이상 유사해야 매칭
+                bestMatchScore = similarity;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> metadata = (Map<String, Object>) redisDoc.get(MetadataConstants.JSON_KEY_METADATA);
+                
+                SourceInfo sourceInfo = new SourceInfo();
+                String filename = metadata != null ? 
+                    metadata.getOrDefault(MetadataConstants.METADATA_FILENAME, MetadataConstants.UNKNOWN_FILENAME).toString() :
+                    MetadataConstants.UNKNOWN_FILENAME;
+                
+                sourceInfo.setFilename(filename);
+                sourceInfo.setContent(content);
+                
+                // chunkId 설정
+                String chunkId = metadata != null ? 
+                    metadata.getOrDefault(MetadataConstants.METADATA_CHUNK_ID, "").toString() :
+                    "";
+                sourceInfo.setChunkId(chunkId.isEmpty() ? null : chunkId);
+                
+                bestMatch = sourceInfo;
+                log.debug("Better match found: similarity={}, filename={}", similarity, filename);
+            }
+        }
+        
+        if (bestMatch != null) {
+            log.debug("Best match found: filename={}, similarity={}", bestMatch.getFilename(), bestMatchScore);
+            return bestMatch;
+        }
+        
+        // 찾지 못했으면 기본 SourceInfo 반환
+        SourceInfo defaultSource = new SourceInfo();
+        defaultSource.setFilename(MetadataConstants.UNKNOWN_FILENAME);
+        defaultSource.setContent(content);
+        log.debug("No matching document found in Redis, using default");
+        return defaultSource;
+    }
+    
+    /**
+     * 두 문자열 간의 유사도 계산 (간단한 Jaccard 유사도 기반)
+     */
+    private double calculateContentSimilarity(String content1, String content2) {
+        // 짧은 내용에 대해서는 정확한 일치 확인
+        if (content1.length() < 100 && content2.length() < 100) {
+            return content1.equals(content2) ? 1.0 : 0.0;
+        }
+        
+        // 더 긴 내용에 대해서는 부분 문자열 매칭
+        String shorter = content1.length() < content2.length() ? content1 : content2;
+        String longer = content1.length() < content2.length() ? content2 : content1;
+        
+        // 20자 이상의 공통 부분 문자열 찾기
+        int maxCommonLength = 0;
+        for (int i = 0; i <= shorter.length() - 20; i++) {
+            for (int j = 20; j <= Math.min(50, shorter.length() - i); j++) {
+                String substring = shorter.substring(i, i + j);
+                if (longer.contains(substring)) {
+                    maxCommonLength = Math.max(maxCommonLength, j);
+                }
+            }
+        }
+        
+        // 유사도 계산 (공통 부분의 길이 / 전체 길이)
+        return (double) maxCommonLength / Math.max(shorter.length(), longer.length());
     }
 }

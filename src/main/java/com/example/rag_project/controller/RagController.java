@@ -48,8 +48,12 @@ public class RagController {
     public ResponseEntity<RagResponse> clearRedisVectorStore() {
         try {
             // Redis 벡터 저장소 초기화 (RedisVectorStore가 직접 처리)
-            ragService.clearStore();
-            return ResponseEntity.ok(RagResponse.success("Redis Vector Store 삭제 완료"));
+            Map<String, Object> result = ragService.clearStore();
+            
+            String message = String.format("Redis Vector Store 삭제 완료 - 총 %d개 파일 삭제 (RAG: %d개, Embedding: %d개)", 
+                result.get("totalDeleted"), result.get("ragKeysDeleted"), result.get("embeddingKeysDeleted"));
+            
+            return ResponseEntity.ok(RagResponse.success(message, result));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("Redis Vector Store 삭제 실패: " + e.getMessage()));
         }
@@ -71,9 +75,12 @@ public class RagController {
     public ResponseEntity<RagResponse> reloadDocuments() {
         try {
             // 벡터 저장소 초기화 후 다시 로드
-            ragService.clearStore();
+            Map<String, Object> clearResult = ragService.clearStore();
             ragService.initializeDocuments();
-            return ResponseEntity.ok(RagResponse.success("문서가 다시 로드되었습니다."));
+            
+            String message = String.format("문서가 다시 로드되었습니다. (%d개 파일 삭제 후 재로드)", clearResult.get("totalDeleted"));
+            
+            return ResponseEntity.ok(RagResponse.success(message, clearResult));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("문서 재로드 실패: " + e.getMessage()));
         }

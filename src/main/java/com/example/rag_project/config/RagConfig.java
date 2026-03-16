@@ -49,6 +49,8 @@ public class RagConfig {
                                                 jedisConnectionFactory.getPort());
         return RedisVectorStore.builder(jedisPooled, embeddingModel)
                 .initializeSchema(true)
+                .prefix("rag:")
+                .indexName("vector_index")
                 .build();
     }
 

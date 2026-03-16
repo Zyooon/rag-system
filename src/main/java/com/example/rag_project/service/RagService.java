@@ -97,8 +97,8 @@ public class RagService {
 
     // === Vector Store Management Methods (위임) ===
     
-    public void clearStore() {
-        vectorStoreService.clearStore();
+    public Map<String, Object> clearStore() {
+        return vectorStoreService.clearStore();
     }
 
     public void initializeDocuments() {

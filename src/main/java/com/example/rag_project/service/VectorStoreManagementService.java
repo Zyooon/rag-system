@@ -73,47 +73,75 @@ public class VectorStoreManagementService {
 
     /**
      * 벡터 저장소 초기화 (Spring AI 추상화 계층 활용)
+     * @return 삭제된 키 수를 포함한 결과 맵
      */
-    public void clearStore() {
+    public Map<String, Object> clearStore() {
+        Map<String, Object> result = new HashMap<>();
+        int totalDeleted = 0;
+        
         try {
             isInitialized = false;
             
             // 1. RedisTemplate을 통해 안전하게 키 삭제
-            clearRedisKeys();
+            Map<String, Object> redisResult = clearRedisKeys();
+            int ragDeleted = (Integer) redisResult.get("ragKeys");
+            int embeddingDeleted = (Integer) redisResult.get("embeddingKeys");
+            totalDeleted = ragDeleted + embeddingDeleted;
             
             // 2. VectorStore를 통한 벡터 데이터 삭제 (Spring AI 추상화)
             clearVectorStoreData();
             
             log.info("벡터 저장소가 초기화되었습니다.");
             
+            result.put("totalDeleted", totalDeleted);
+            result.put("ragKeysDeleted", ragDeleted);
+            result.put("embeddingKeysDeleted", embeddingDeleted);
+            result.put("success", true);
+            
         } catch (Exception e) {
             log.error(ErrorConstants.ERROR_VECTORSTORE_INIT_FAILED + e.getMessage());
+            result.put("success", false);
+            result.put("error", e.getMessage());
             throw new RuntimeException(MessageConstants.MSG_VECTORSTORE_INIT_ERROR, e);
         }
+        
+        return result;
     }
     
     /**
      * RedisTemplate을 통해 설정된 키 패턴으로 데이터 삭제
+     * @return 삭제된 키 수를 포함한 결과 맵
      */
-    private void clearRedisKeys() {
+    private Map<String, Object> clearRedisKeys() {
+        Map<String, Object> result = new HashMap<>();
+        int ragDeleted = 0;
+        int embeddingDeleted = 0;
+        
         try {
             // RAG 관련 키 삭제
             Set<String> ragKeys = redisTemplate.keys(keyPrefix + "*");
             if (ragKeys != null && !ragKeys.isEmpty()) {
                 redisTemplate.delete(ragKeys);
-                log.info("RAG 관련 키 {}개 삭제 완료", ragKeys.size());
+                ragDeleted = ragKeys.size();
+                log.info("RAG 관련 키 {}개 삭제 완료", ragDeleted);
             }
             
             // Embedding 관련 키 삭제
             Set<String> embeddingKeys = redisTemplate.keys(embeddingPrefix + "*");
             if (embeddingKeys != null && !embeddingKeys.isEmpty()) {
                 redisTemplate.delete(embeddingKeys);
-                log.info("Embedding 관련 키 {}개 삭제 완료", embeddingKeys.size());
+                embeddingDeleted = embeddingKeys.size();
+                log.info("Embedding 관련 키 {}개 삭제 완료", embeddingDeleted);
             }
             
         } catch (Exception e) {
             log.warn(MessageConstants.MSG_REDIS_KEY_DELETE_ERROR, e.getMessage());
         }
+        
+        result.put("ragKeys", ragDeleted);
+        result.put("embeddingKeys", embeddingDeleted);
+        
+        return result;
     }
     
     /**
@@ -261,7 +289,7 @@ public class VectorStoreManagementService {
         
         return status;
     }
-
+    
     /**
      * 문서 로딩 후 상태 업데이트
      */

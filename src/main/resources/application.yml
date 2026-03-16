@@ -17,12 +17,11 @@ spring:
         model: bge-m3
   application:
     name: rag-project
-  # Redis 설정 (향후 RedisVectorStore 사용 시)
+  # Redis 설정
   data:
     redis:
       host: localhost
       port: 6379
-      # password: 1234  # Redis Stack Server는 비밀번호 없음
       timeout: 2000ms
       lettuce:
         pool:
@@ -38,7 +37,7 @@ rag:
     threshold: 0.3
     max-results: 5
   vectorstore:
-    type: redis  # RedisVectorStore 사용
+    type: redis
   # Redis 벡터 저장소 설정
   redis:
     vectorstore:

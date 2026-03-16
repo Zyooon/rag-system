@@ -11,7 +11,7 @@ import java.util.List;
 public class TextSplitterFactory {
     
     // 기본 설정 상수
-    public static final int DEFAULT_CHUNK_SIZE = 150;
+    public static final int DEFAULT_CHUNK_SIZE = 300;
     public static final int DEFAULT_MIN_CHUNK_SIZE_CHARS = 50;
     public static final int DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED = 20;
     public static final int DEFAULT_MAX_NUM_CHUNKS = 500;

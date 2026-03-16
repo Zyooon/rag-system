@@ -4,12 +4,14 @@ import com.example.rag_project.constants.MetadataConstants;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import java.text.DecimalFormat;
 import java.util.Map;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Slf4j
 public class SourceInfo {
     
     private String filename;
@@ -21,12 +23,18 @@ public class SourceInfo {
         SourceInfo source = new SourceInfo();
         Map<String, Object> metadata = document.getMetadata();
 
+        // 디버깅용 로그
+        log.debug("Document metadata keys: {}", metadata.keySet());
+        log.debug("Document metadata: {}", metadata);
+
         // 메타데이터에서 파일명 추출
         String filename = metadata.getOrDefault(MetadataConstants.METADATA_FILENAME, "").toString();
+        log.debug("Extracted filename: {}", filename);
         
         // 메타데이터에 파일명이 없으면 기본값 설정
         if (filename.isEmpty() || filename.equals(MetadataConstants.UNKNOWN)) {
             filename = MetadataConstants.UNKNOWN_FILENAME;
+            log.debug("Using default filename: {}", filename);
         }
         
         source.setFilename(filename);
