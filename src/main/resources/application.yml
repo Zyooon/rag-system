@@ -39,6 +39,12 @@ rag:
     max-results: 5
   vectorstore:
     type: redis  # RedisVectorStore 사용
+  # Redis 벡터 저장소 설정
+  redis:
+    vectorstore:
+      index-name: "vector_index"
+      key-prefix: "rag:"
+      embedding-prefix: "embedding:"
 
 server:
   port: 8080
