@@ -1,8 +1,6 @@
 package com.example.rag_project.parser;
 
 import org.springframework.ai.document.Document;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +13,6 @@ import java.util.regex.Pattern;
  * 구조화된 텍스트, 번호 목록, Markdown 형식을 지원
  */
 public class HierarchicalParser {
-    private static final Logger logger = LoggerFactory.getLogger(HierarchicalParser.class);
     
     private String currentH1 = "";  // 대제목 (Level 1)
     private String currentH2 = "";  // 중제목 (Level 2)
@@ -85,7 +82,6 @@ public class HierarchicalParser {
             }
         }
         
-        logger.info("문서 파싱 완료: {}개의 구조화된 섹션 생성", documents.size());
         return documents;
     }
     

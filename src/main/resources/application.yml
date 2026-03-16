@@ -14,7 +14,7 @@ spring:
           top-p: 0.9
           max-tokens: 1000
       embedding:
-        model: mxbai-embed-large
+        model: bge-m3
   application:
     name: rag-project
   # Redis 설정 (향후 RedisVectorStore 사용 시)
