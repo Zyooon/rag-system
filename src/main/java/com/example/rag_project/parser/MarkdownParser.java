@@ -31,7 +31,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class MarkdownParser {
+public class MarkdownParser implements DocumentParser {
     
     /**
      * Markdown 문서인지 확인
@@ -147,5 +147,24 @@ public class MarkdownParser {
         metadata.put(ConfigConstants.METADATA_KEY_H3, h3);
         
         return new Document(content.trim(), metadata);
+    }
+    
+    /**
+     * Markdown 문서인지 확인 (인터페이스 구현)
+     * @param content 확인할 텍스트 내용
+     * @return Markdown 문서이면 true
+     */
+    @Override
+    public boolean canHandle(String content) {
+        return isMarkdownDocument(content);
+    }
+    
+    /**
+     * 파서 이름 반환
+     * @return "Markdown"
+     */
+    @Override
+    public String getParserName() {
+        return "Markdown";
     }
 }

@@ -29,7 +29,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class SimpleLineParser {
+public class SimpleLineParser implements DocumentParser {
     
     private static final int MAX_CHUNK_LENGTH = ConfigConstants.MAX_CHUNK_LENGTH;
     private static final int MIN_CHUNK_LENGTH = ConfigConstants.MIN_CHUNK_LENGTH;
@@ -154,5 +154,14 @@ public class SimpleLineParser {
             title = title.substring(0, ConfigConstants.TRUNCATED_TITLE_LENGTH) + ConfigConstants.ELLIPSIS;
         }
         return title;
+    }
+    
+    /**
+     * 파서 이름 반환
+     * @return "SimpleLine"
+     */
+    @Override
+    public String getParserName() {
+        return CommonConstants.PARSER_SIMPLE_LINE;
     }
 }

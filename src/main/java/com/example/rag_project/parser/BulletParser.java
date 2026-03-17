@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class BulletParser {
+public class BulletParser implements DocumentParser {
     
     /**
      * 불릿 기반으로 텍스트 파싱
@@ -157,5 +157,14 @@ public class BulletParser {
         }
         
         return title.trim();
+    }
+    
+    /**
+     * 파서 이름 반환
+     * @return "Bullet"
+     */
+    @Override
+    public String getParserName() {
+        return CommonConstants.PARSER_BULLET;
     }
 }

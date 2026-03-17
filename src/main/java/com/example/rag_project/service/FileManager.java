@@ -39,7 +39,6 @@ import java.util.Map;
  * <ul>
  *   <li><b>.txt</b> - 일반 텍스트 파일</li>
  *   <li><b>.md</b> - 마크다운 파일</li>
- *   <li><b>제외</b> - readme.md (특별 제외)</li>
  * </ul>
  * 
  * <p><b>의존성:</b> 없음 (순수 파일 시스템 작업)</p>
@@ -140,10 +139,8 @@ public class FileManager {
      */
     public boolean isSupportedTextFile(String fileName) {
         String lowerFileName = fileName.toLowerCase();
-        boolean isTextOrMd = lowerFileName.endsWith(CommonConstants.TXT_EXTENSION) || 
-                             lowerFileName.endsWith(CommonConstants.MD_EXTENSION);
-        boolean isReadme = lowerFileName.equals(CommonConstants.README_FILENAME);
-        return isTextOrMd && !isReadme;
+        return lowerFileName.endsWith(CommonConstants.TXT_EXTENSION) || 
+               lowerFileName.endsWith(CommonConstants.MD_EXTENSION);
     }
 
     /**

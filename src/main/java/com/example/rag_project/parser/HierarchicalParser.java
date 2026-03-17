@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Component
-public class HierarchicalParser {
+public class HierarchicalParser implements DocumentParser {
     
     private String currentH1 = CommonConstants.EMPTY_STRING;  // 대제목 (Level 1)
     private String currentH2 = CommonConstants.EMPTY_STRING;  // 중제목 (Level 2)
@@ -442,5 +442,14 @@ public class HierarchicalParser {
         }
         
         return documents;
+    }
+    
+    /**
+     * 파서 이름 반환
+     * @return "Hierarchical"
+     */
+    @Override
+    public String getParserName() {
+        return CommonConstants.PARSER_HIERARCHICAL;
     }
 }
