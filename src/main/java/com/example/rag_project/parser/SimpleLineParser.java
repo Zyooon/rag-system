@@ -1,5 +1,6 @@
 package com.example.rag_project.parser;
 
+import com.example.rag_project.constants.CommonConstants;
 import com.example.rag_project.constants.ConfigConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -99,7 +100,7 @@ public class SimpleLineParser {
             } else {
                 // 현재 청크에 추가
                 if (currentChunk.length() > 0) {
-                    currentChunk.append(ConfigConstants.SPACE_SEPARATOR);
+                    currentChunk.append(CommonConstants.SPACE);
                 }
                 currentChunk.append(trimmedSentence);
             }

@@ -16,6 +16,7 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
+import com.example.rag_project.constants.ConfigConstants;
 import redis.clients.jedis.JedisPooled;
 
 @Configuration
@@ -25,7 +26,7 @@ public class RagConfig {
     @Bean
     public OllamaApi ollamaApi() {
         return OllamaApi.builder()
-                .baseUrl("http://localhost:11434")
+                .baseUrl(ConfigConstants.DEFAULT_OLLAMA_BASE_URL)
                 .build();
     }
 
@@ -36,7 +37,7 @@ public class RagConfig {
                 .ollamaApi(ollamaApi)
                 .defaultOptions(
                         OllamaEmbeddingOptions.builder()
-                                .model("bge-m3")
+                                .model(ConfigConstants.DEFAULT_OLLAMA_EMBEDDING_MODEL)
                                 .build()
                 )
                 .build();
@@ -49,8 +50,8 @@ public class RagConfig {
                                                 jedisConnectionFactory.getPort());
         return RedisVectorStore.builder(jedisPooled, embeddingModel)
                 .initializeSchema(true)
-                .prefix("rag:")
-                .indexName("vector_index")
+                .prefix(ConfigConstants.VECTORSTORE_PREFIX)
+                .indexName(ConfigConstants.VECTORSTORE_INDEX_NAME)
                 .build();
     }
 
@@ -59,9 +60,9 @@ public class RagConfig {
     public JedisConnectionFactory jedisConnectionFactory() {
         RedisStandaloneConfiguration config = 
             new RedisStandaloneConfiguration();
-        config.setHostName("localhost");
-        config.setPort(6379);
-        config.setDatabase(0);
+        config.setHostName(ConfigConstants.DEFAULT_REDIS_HOST);
+        config.setPort(ConfigConstants.DEFAULT_REDIS_PORT);
+        config.setDatabase(ConfigConstants.DEFAULT_REDIS_DATABASE);
         
         JedisConnectionFactory factory = 
             new JedisConnectionFactory(config);
@@ -91,7 +92,7 @@ public class RagConfig {
                 .ollamaApi(ollamaApi)
                 .defaultOptions(
                         OllamaChatOptions.builder()
-                                .model("llama3")
+                                .model(ConfigConstants.DEFAULT_OLLAMA_CHAT_MODEL)
                                 .build()
                 )
                 .build();

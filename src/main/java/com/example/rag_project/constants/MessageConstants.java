@@ -13,14 +13,73 @@ public final class MessageConstants {
     
     // ==================== 사용자 응답 메시지 ====================
     
+    // ==================== 에러 관련 상수 ====================
+    
+    /** 문서 로드 실패 에러 */
+    public static final String ERROR_DOCUMENT_LOAD_FAILED = "문서 로드 실패: ";
+    
+    /** 벡터 저장소 초기화 실패 에러 */
+    public static final String ERROR_VECTORSTORE_INIT_FAILED = "벡터 저장소 초기화 실패: ";
+    
+    /** Redis 문서 로드 실패 에러 */
+    public static final String ERROR_REDIS_LOAD_FAILED = "Redis 문서 로드 실패: ";
+    
+    /** 검색 실패 에러 */
+    public static final String ERROR_SEARCH_FAILED = "검색 실패: ";
+    
+    /** 잘못된 인자 에러 */
+    public static final String ERROR_INVALID_ARGUMENT = "잘못된 인자: ";
+    
+    /** 파일 로드 실패 에러 로그 */
+    public static final String LOG_FILE_LOAD_FAILED = "파일에서 Redis로 데이터 로드 실패: {}";
+    
+    /** 예상치 못한 오류 에러 로그 */
+    public static final String LOG_UNEXPECTED_ERROR = "예상치 못한 오류: {}";
+    
+    /** 메타데이터 JSON 파싱 실패 에러 로그 */
+    public static final String LOG_METADATA_JSON_PARSE_FAILED = "메타데이터 JSON 파싱 실패: {}";
+    
+    /** 문서 처리 실패 에러 로그 */
+    public static final String LOG_DOCUMENT_PROCESS_FAILED = "문서 처리 실패 ({}): {}";
+    
+    /** 문서 상태 확인 실패 에러 로그 */
+    public static final String LOG_DOCUMENT_STATUS_CHECK_FAILED = "문서 상태 확인 실패: {}";
+    
+    /** Redis 벡터 저장소 상태 확인 실패 에러 로그 */
+    public static final String LOG_REDIS_VECTORSTORE_STATUS_FAILED = "Redis 벡터 저장소 상태 확인 실패: {}";
+    
+    /** Redis 상태 확인 오류 에러 로그 */
+    public static final String LOG_REDIS_STATUS_CHECK_ERROR = "Redis 상태 확인 중 오류: {}";
+    
+    /** 내부 서버 에러 */
+    public static final String ERROR_TYPE_INTERNAL_SERVER = "Internal Server Error";
+    
+    /** 런타임 에러 */
+    public static final String ERROR_TYPE_RUNTIME = "Runtime Error";
+    
+    /** RAG 서비스 에러 */
+    public static final String ERROR_TYPE_RAG_SERVICE = "RAG Service Error";
+    
+    /** 잘못된 인자 에러 */
+    public static final String ERROR_TYPE_INVALID_ARGUMENT = "Invalid Argument";
+    
+    /** API 응답 키 상수 */
+    public static final String RESPONSE_KEY_SUCCESS = "success";
+    public static final String RESPONSE_KEY_TIMESTAMP = "timestamp";
+    public static final String RESPONSE_KEY_ERROR = "error";
+    public static final String RESPONSE_KEY_MESSAGE = "message";
+    public static final String RESPONSE_KEY_PATH = "path";
+    public static final String RESPONSE_KEY_STATUS = "status";
+    
     /** 관련 정보 없음 메시지 */
     public static final String MSG_NO_RELEVANT_INFO = "관련 정보를 찾을 수 없습니다.";
     
     /** 신뢰할 수 있는 정보 없음 메시지 */
     public static final String MSG_NO_RELIABLE_INFO = "질문과 관련된 충분히 신뢰할 수 있는 정보를 찾을 수 없습니다.";
     
-    /** README 파일명 */
-    public static final String README_FILENAME = "README.md";
+    /** README 파일명 - CommonConstants에서 관리 */
+    @Deprecated
+    public static final String README_FILENAME = CommonConstants.README_FILENAME;
     
     /** 지식 베이스 데이터 없음 메시지 */
     public static final String MSG_NO_KNOWLEDGE_BASE = "현재 지식 베이스(Redis)에 저장된 데이터가 없어 답변을 드릴 수 없습니다.";

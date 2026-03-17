@@ -1,31 +1,25 @@
-package com.example.rag_project.storage;
+package com.example.rag_project.repository;
 
-import com.example.rag_project.constants.RedisConstants;
-import com.example.rag_project.constants.MetadataConstants;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.example.rag_project.constants.CommonConstants;
+import com.example.rag_project.constants.ConfigConstants;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.stereotype.Component;
-
-import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
- * Redis 문서 저장소 관리자
+ * Redis 문서 데이터 접근 레포지토리
  * 
- * <p>이 클래스는 RAG 시스템의 문서 영속성을 담당합니다:</p>
+ * <p>이 클래스는 Redis에 저장된 문서 데이터에 직접 접근하는 역할을 담당합니다:</p>
  * <ul>
- *   <li>문서의 Redis 저장 및 조회</li>
- *   <li>문서 메타데이터 관리</li>
- *   <li>중복 문서 검사 및 방지</li>
- *   <li>문서 키 관리 및 검색</li>
+ *   <li>📄 <b>문서 CRUD</b> - 문서 생성, 조회, 수정, 삭제</li>
+ *   <li>🔍 <b>키 관리</b> - 문서 키 생성 및 관리</li>
+ *   <li>📊 <b>데이터 조회</b> - 다양한 조건의 문서 조회</li>
+ *   <li>🛡️ <b>예외 처리</b> - Redis 연결 및 데이터 처리 예외</li>
  * </ul>
  * 
  * <p><b>주요 책임:</b></p>
@@ -45,21 +39,16 @@ import java.util.Set;
  * 
  * <p><b>의존성:</b> RedisTemplate&lt;String, Object&gt;</p>
  */
-
-@Component
+@Repository
 @RequiredArgsConstructor
-public class RedisDocumentManager {
-    
-    private static final Logger logger = LoggerFactory.getLogger(RedisDocumentManager.class);
-    
+@Slf4j
+public class RedisDocumentRepository {
+
     private final RedisTemplate<String, Object> redisTemplate;
-    
+
     /** Redis 문서 키 접두사 */
-    private static final String DOCUMENT_KEY_PREFIX = RedisConstants.REDIS_DOCUMENT_KEY_PREFIX;
-    
-    /** 메타데이터 필드명 상수들 */
-    private static final String METADATA_SAVED_AT = MetadataConstants.METADATA_SAVED_AT;
-    
+    private static final String DOCUMENT_KEY_PREFIX = ConfigConstants.REDIS_DOCUMENT_KEY_PREFIX;
+
     /**
      * Redis에 저장된 모든 문서 키 목록 조회
      * @return 문서 키 목록
@@ -72,30 +61,11 @@ public class RedisDocumentManager {
             }
             return new ArrayList<>();
         } catch (Exception e) {
-            logger.error("Redis 키 조회 실패: {}", e.getMessage());
+            log.error("Redis 키 조회 실패: {}", e.getMessage());
             return new ArrayList<>();
         }
     }
-    
-    /**
-     * Redis에 저장된 모든 문서 조회
-     * @return 문서 목록
-     */
-    public List<Map<String, Object>> getAllDocuments() {
-        List<String> keys = getAllDocumentKeys();
-        List<Map<String, Object>> documents = new ArrayList<>();
-        
-        for (String key : keys) {
-            Map<String, Object> doc = getDocument(key);
-            if (!doc.isEmpty()) {
-                documents.add(doc);
-            }
-        }
-        
-        logger.info("Redis에서 {}개의 문서를 조회했습니다", documents.size());
-        return documents;
-    }
-    
+
     /**
      * 특정 키로 문서 조회
      * @param key 문서 키
@@ -110,14 +80,14 @@ public class RedisDocumentManager {
                 result.put(entry.getKey().toString(), entry.getValue());
             }
             
-            logger.debug("문서 조회 성공 ({}): {}개 필드", key, result.size());
+            log.debug("문서 조회 성공 ({}): {}개 필드", key, result.size());
             return result;
         } catch (Exception e) {
-            logger.error("Redis 문서 조회 실패 ({}): {}", key, e.getMessage());
+            log.error("Redis 문서 조회 실패 ({}): {}", key, e.getMessage());
             return new HashMap<>();
         }
     }
-    
+
     /**
      * 문서 목록을 Redis에 저장
      * @param documents 저장할 문서 목록
@@ -134,37 +104,37 @@ public class RedisDocumentManager {
             // 중복 체크
             if (redisTemplate.hasKey(key)) {
                 duplicateCount++;
-                logger.info("중복 문서 건너뛰기: {}", key);
+                log.info("중복 문서 건너뛰기: {}", key);
                 continue;
             }
             
             Map<String, Object> documentData = new HashMap<>();
-            documentData.put("content", doc.getText());
-            documentData.put("metadata", doc.getMetadata());
+            documentData.put(CommonConstants.KEY_CONTENT, doc.getText());
+            documentData.put(CommonConstants.KEY_METADATA, doc.getMetadata());
             documentData.put("id", i);
-            documentData.put(METADATA_SAVED_AT, LocalDateTime.now().toString());
+            documentData.put("saved_at", LocalDateTime.now().toString());
             
             try {
                 redisTemplate.opsForHash().putAll(key, documentData);
                 savedCount++;
-                logger.debug("문서 저장 성공: {}", key);
+                log.debug("문서 저장 성공: {}", key);
             } catch (Exception e) {
-                logger.error("문서 저장 실패 ({}): {}", key, e.getMessage());
+                log.error("문서 저장 실패 ({}): {}", key, e.getMessage());
             }
         }
         
         String message = String.format("문서 저장 완료: %d개 저장, %d개 중복", 
                                        savedCount, duplicateCount);
-        logger.info(message);
+        log.info(message);
         
         return Map.of(
-            "savedCount", savedCount,
-            "duplicateCount", duplicateCount,
-            "totalCount", documents.size(),
-            "message", message
+            ConfigConstants.MAP_KEY_SAVED_COUNT, savedCount,
+            ConfigConstants.MAP_KEY_DUPLICATE_COUNT, duplicateCount,
+            ConfigConstants.MAP_KEY_TOTAL_COUNT, documents.size(),
+            ConfigConstants.MAP_KEY_MESSAGE, message
         );
     }
-    
+
     /**
      * 특정 문서 삭제
      * @param key 삭제할 문서 키
@@ -174,16 +144,16 @@ public class RedisDocumentManager {
         try {
             Boolean result = redisTemplate.delete(key);
             if (result != null && result) {
-                logger.info("문서 삭제 성공: {}", key);
+                log.info("문서 삭제 성공: {}", key);
                 return true;
             }
             return false;
         } catch (Exception e) {
-            logger.error("문서 삭제 실패 ({}): {}", key, e.getMessage());
+            log.error("문서 삭제 실패 ({}): {}", key, e.getMessage());
             return false;
         }
     }
-    
+
     /**
      * 모든 문서 삭제
      * @return 삭제된 문서 수
@@ -198,10 +168,10 @@ public class RedisDocumentManager {
             }
         }
         
-        logger.info("총 {}개의 문서를 삭제했습니다", deletedCount);
+        log.info("총 {}개의 문서를 삭제했습니다", deletedCount);
         return deletedCount;
     }
-    
+
     /**
      * 문서 개수 조회
      * @return 저장된 문서 수
@@ -219,8 +189,44 @@ public class RedisDocumentManager {
             redisTemplate.opsForValue().get("health_check_" + System.currentTimeMillis());
             return true;
         } catch (Exception e) {
-            logger.warn("Redis 연결 상태 확인 실패: {}", e.getMessage());
+            log.warn("Redis 연결 상태 확인 실패: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 키 패턴으로 Redis 키들 삭제
+     * @param keyPattern 키 패턴 (예: "rag:document:*")
+     * @return 삭제된 키 수
+     */
+    public int deleteKeysByPattern(String keyPattern) {
+        try {
+            Set<String> keys = redisTemplate.keys(keyPattern);
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+                log.info("키 패턴 '{}'으로 {}개의 키를 삭제했습니다", keyPattern, keys.size());
+                return keys.size();
+            }
+            return 0;
+        } catch (Exception e) {
+            log.error("키 패턴 삭제 실패 ({}): {}", keyPattern, e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * 여러 키 패턴으로 Redis 키들 삭제
+     * @param keyPatterns 키 패턴 목록
+     * @return 각 패턴별 삭제된 키 수 맵
+     */
+    public Map<String, Integer> deleteKeysByPatterns(List<String> keyPatterns) {
+        Map<String, Integer> results = new HashMap<>();
+        
+        for (String pattern : keyPatterns) {
+            int deletedCount = deleteKeysByPattern(pattern);
+            results.put(pattern, deletedCount);
+        }
+        
+        return results;
     }
 }

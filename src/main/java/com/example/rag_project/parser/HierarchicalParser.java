@@ -1,5 +1,6 @@
 package com.example.rag_project.parser;
 
+import com.example.rag_project.constants.CommonConstants;
 import com.example.rag_project.constants.ConfigConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -19,9 +20,9 @@ import java.util.regex.Pattern;
 @Component
 public class HierarchicalParser {
     
-    private String currentH1 = ConfigConstants.EMPTY_STRING;  // 대제목 (Level 1)
-    private String currentH2 = ConfigConstants.EMPTY_STRING;  // 중제목 (Level 2)
-    private String currentH3 = ConfigConstants.EMPTY_STRING;  // 소제목 (Level 3)
+    private String currentH1 = CommonConstants.EMPTY_STRING;  // 대제목 (Level 1)
+    private String currentH2 = CommonConstants.EMPTY_STRING;  // 중제목 (Level 2)
+    private String currentH3 = CommonConstants.EMPTY_STRING;  // 소제목 (Level 3)
     
     // 제목 패턴 정의 (마크다운 형식 우선)
     private static final Pattern[] HEADING_PATTERNS = {
@@ -115,12 +116,12 @@ public class HierarchicalParser {
                         break;
                     case 1: // ## 소제목
                         currentH2 = title;
-                        currentH3 = ConfigConstants.EMPTY_STRING;
+                        currentH3 = CommonConstants.EMPTY_STRING;
                         break;
                     case 2: // # 제목
                         currentH1 = title;
-                        currentH2 = ConfigConstants.EMPTY_STRING;
-                        currentH3 = ConfigConstants.EMPTY_STRING;
+                        currentH2 = CommonConstants.EMPTY_STRING;
+                        currentH3 = CommonConstants.EMPTY_STRING;
                         break;
                     case 3: // 굵은 글씨 항목
                     case 4: // 일반 목록 항목
@@ -141,7 +142,7 @@ public class HierarchicalParser {
      * 제목에서 불필요한 기호 제거
      */
     private String cleanTitle(String title) {
-        if (title == null) return ConfigConstants.EMPTY_STRING;
+        if (title == null) return CommonConstants.EMPTY_STRING;
         
         return title
             .replaceAll("^#+\\s*", "")      // 마크다운 # 제거
@@ -188,7 +189,7 @@ public class HierarchicalParser {
      * sample-odd.txt는 무조건 일반 불릿으로 처리
      */
     private boolean containsBulletsWithHeaders(String content) {
-        String[] lines = content.split(ConfigConstants.NEWLINE);
+        String[] lines = content.split(CommonConstants.NEWLINE);
         boolean hasNumberedHeader = false;
         boolean hasBullets = false;
         int numberedHeaderCount = 0;
@@ -225,7 +226,7 @@ public class HierarchicalParser {
      */
     private List<Document> parseBulletWithHeader(String content, Map<String, Object> baseMetadata) {
         List<Document> result = new ArrayList<>();
-        String[] lines = content.split(ConfigConstants.NEWLINE);
+        String[] lines = content.split(CommonConstants.NEWLINE);
         
         log.debug("parseBulletWithHeader 시작: 총 {} 라인", lines.length);
         
@@ -255,7 +256,7 @@ public class HierarchicalParser {
             else if (!trimmedLine.isEmpty() && !currentHeader.isEmpty()) {
                 log.debug("내용 추가: {}", trimmedLine);
                 if (currentBody.length() > 0) {
-                    currentBody.append(ConfigConstants.NEWLINE);
+                    currentBody.append(CommonConstants.NEWLINE);
                 }
                 currentBody.append(line);
             }
@@ -296,7 +297,7 @@ public class HierarchicalParser {
     private void saveCurrentChunk(List<Document> result, String header, StringBuilder body, 
                                  int headerLineNum, Map<String, Object> baseMetadata) {
         if (header.length() > 0 && body.length() > 0) {
-            String combinedContent = header + ConfigConstants.NEWLINE + body.toString().trim();
+            String combinedContent = header + CommonConstants.NEWLINE + body.toString().trim();
             log.debug("아이템 저장: 헤더={}, 바디 길이={}", header, body.length());
             Document doc = createBulletDocument(combinedContent, header, body.toString(), 
                                               headerLineNum, baseMetadata);
@@ -326,8 +327,8 @@ public class HierarchicalParser {
         
         // 계층 정보 추가
         metadata.put(ConfigConstants.METADATA_KEY_H1, headerTitle);
-        metadata.put(ConfigConstants.METADATA_KEY_H2, ConfigConstants.EMPTY_STRING);
-        metadata.put(ConfigConstants.METADATA_KEY_H3, ConfigConstants.EMPTY_STRING);
+        metadata.put(ConfigConstants.METADATA_KEY_H2, CommonConstants.EMPTY_STRING);
+        metadata.put(ConfigConstants.METADATA_KEY_H3, CommonConstants.EMPTY_STRING);
         metadata.put(ConfigConstants.METADATA_KEY_HEADING_LEVEL, ConfigConstants.HEADING_LEVEL_1);
         
         // 바디 내용 요약 (검색 키워드로 활용)
@@ -346,7 +347,7 @@ public class HierarchicalParser {
      */
     private String extractHeaderTitle(String header) {
         if (header == null || header.isEmpty()) {
-            return ConfigConstants.EMPTY_STRING;
+            return CommonConstants.EMPTY_STRING;
         }
         
         // 번호 접두사 제거
@@ -367,7 +368,7 @@ public class HierarchicalParser {
      */
     private List<Document> parseGeneralDocument(String content, Map<String, Object> baseMetadata) {
         List<Document> documents = new ArrayList<>();
-        String[] lines = content.split(ConfigConstants.NEWLINE);
+        String[] lines = content.split(CommonConstants.NEWLINE);
         
         StringBuilder currentSection = new StringBuilder();
         StringBuilder currentSubsection = new StringBuilder();

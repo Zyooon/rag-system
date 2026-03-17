@@ -1,40 +1,62 @@
 package com.example.rag_project.splitter;
 
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-
-import java.util.List;
+import org.springframework.stereotype.Component;
 
 /**
- * TokenTextSplitter 생성을 위한 팩토리 클래스
- * 다양한 설정으로 TokenTextSplitter를 생성하고 관리
+ * TextSplitter 생성을 위한 순수 팩토리 클래스
+ * 
+ * <p>이 클래스는 TextSplitter 인스턴스 생성만 담당합니다:</p>
+ * <ul>
+ *   <li>🏭 <b>인스턴스 생성</b> - 다양한 설정으로 TokenTextSplitter 생성</li>
+ *   <li>⚙️ <b>설정 적용</b> - TextSplitterConfig의 설정값 적용</li>
+ *   <li>🔧 <b>전략 제공</b> - 다양한 분할 전략용 Splitter 제공</li>
+ * </ul>
+ * 
+ * <p><b>제공되는 Splitter:</b></p>
+ * <ul>
+ *   <li><b>기본 Splitter</b>: 일반 문서 처리용</li>
+ *   <li><b>정밀 Splitter</b>: 정밀 검색용</li>
+ *   <li><b>속도 Splitter</b>: 속도 최적화용</li>
+ *   <li><b>커스텀 Splitter</b>: 사용자 정의 설정용</li>
+ * </ul>
+ * 
+ * <p><b>의존성:</b> TextSplitterConfig (설정값)</p>
+ * <p><b>출력물:</b> TokenTextSplitter 인스턴스</p>
  */
+@Component
 public class TextSplitterFactory {
-    
-    // 기본 설정 상수
-    public static final int DEFAULT_CHUNK_SIZE = 300;
-    public static final int DEFAULT_MIN_CHUNK_SIZE_CHARS = 50;
-    public static final int DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED = 20;
-    public static final int DEFAULT_MAX_NUM_CHUNKS = 500;
-    public static final boolean DEFAULT_KEEP_SEPARATOR = true;
-    public static final List<Character> DEFAULT_PUNCTUATION_MARKS = List.of('.', '\n', ']', '-');
     
     /**
      * 기본 설정으로 TokenTextSplitter 생성
      * @return 기본 설정이 적용된 TokenTextSplitter
      */
-    public static TokenTextSplitter createDefault() {
-        return new TokenTextSplitter(
-            DEFAULT_CHUNK_SIZE,
-            DEFAULT_MIN_CHUNK_SIZE_CHARS,
-            DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED,
-            DEFAULT_MAX_NUM_CHUNKS,
-            DEFAULT_KEEP_SEPARATOR,
-            DEFAULT_PUNCTUATION_MARKS
-        );
+    public TokenTextSplitter createDefault() {
+        TextSplitterConfig.SplitterSettings settings = TextSplitterConfig.getDefaultSettings();
+        return createFromSettings(settings);
+    }
+    
+    /**
+     * 정밀 검색용 설정으로 TokenTextSplitter 생성
+     * @return 정밀 검색용 TokenTextSplitter
+     */
+    public TokenTextSplitter createForPreciseSearch() {
+        TextSplitterConfig.SplitterSettings settings = TextSplitterConfig.getPreciseSearchSettings();
+        return createFromSettings(settings);
+    }
+    
+    /**
+     * 속도 최적화용 설정으로 TokenTextSplitter 생성
+     * @return 속도 최적화용 TokenTextSplitter
+     */
+    public TokenTextSplitter createForSpeedOptimization() {
+        TextSplitterConfig.SplitterSettings settings = TextSplitterConfig.getSpeedOptimizationSettings();
+        return createFromSettings(settings);
     }
     
     /**
      * 사용자 정의 설정으로 TokenTextSplitter 생성
+     * 
      * @param chunkSize 청크 크기
      * @param minChunkSizeChars 최소 청크 문자 수
      * @param minChunkLengthToEmbed 임베딩 최소 길이
@@ -43,50 +65,36 @@ public class TextSplitterFactory {
      * @param punctuationMarks 구분자 목록
      * @return 사용자 정의 설정이 적용된 TokenTextSplitter
      */
-    public static TokenTextSplitter createCustom(
+    public TokenTextSplitter createCustom(
             int chunkSize, 
             int minChunkSizeChars, 
             int minChunkLengthToEmbed, 
             int maxNumChunks, 
             boolean keepSeparator, 
-            List<Character> punctuationMarks) {
-        return new TokenTextSplitter(
-            chunkSize,
-            minChunkSizeChars,
-            minChunkLengthToEmbed,
-            maxNumChunks,
-            keepSeparator,
-            punctuationMarks
+            java.util.List<Character> punctuationMarks) {
+        
+        TextSplitterConfig.SplitterSettings settings = new TextSplitterConfig.SplitterSettings(
+            chunkSize, minChunkSizeChars, minChunkLengthToEmbed, 
+            maxNumChunks, keepSeparator, punctuationMarks
         );
+        
+        return createFromSettings(settings);
     }
     
     /**
-     * 정밀 검색용 설정으로 TokenTextSplitter 생성
-     * @return 정밀 검색용 TokenTextSplitter
+     * 설정 객체로부터 TokenTextSplitter 생성
+     * 
+     * @param settings 분할 설정
+     * @return TokenTextSplitter 인스턴스
      */
-    public static TokenTextSplitter createForPreciseSearch() {
+    private TokenTextSplitter createFromSettings(TextSplitterConfig.SplitterSettings settings) {
         return new TokenTextSplitter(
-            100,    // chunkSize: 더 세분화된 청크
-            30,     // minChunkSizeChars: 더 짧은 청크 허용
-            10,     // minChunkLengthToEmbed: 더 낮은 임베딩 기준
-            800,    // maxNumChunks: 더 많은 청크 생성
-            true,    // keepSeparator: 문장 구조 유지
-            DEFAULT_PUNCTUATION_MARKS
-        );
-    }
-    
-    /**
-     * 속도 최적화용 설정으로 TokenTextSplitter 생성
-     * @return 속도 최적화용 TokenTextSplitter
-     */
-    public static TokenTextSplitter createForSpeedOptimization() {
-        return new TokenTextSplitter(
-            400,    // chunkSize: 더 큰 청크
-            100,    // minChunkSizeChars: 더 긴 최소 크기
-            10,     // minChunkLengthToEmbed: 더 낮은 임베딩 기준
-            1000,   // maxNumChunks: 더 많은 청크 허용
-            true,    // keepSeparator: 문장 구조 유지
-            DEFAULT_PUNCTUATION_MARKS
+            settings.getChunkSize(),
+            settings.getMinChunkSizeChars(),
+            settings.getMinChunkLengthToEmbed(),
+            settings.getMaxNumChunks(),
+            settings.isKeepSeparator(),
+            settings.getPunctuationMarks()
         );
     }
 }

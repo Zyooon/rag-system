@@ -1,5 +1,6 @@
 package com.example.rag_project.parser;
 
+import com.example.rag_project.constants.CommonConstants;
 import com.example.rag_project.constants.ConfigConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -44,7 +45,7 @@ public class BulletParser {
      */
     public List<Document> parse(String content, Map<String, Object> baseMetadata) {
         List<Document> documents = new ArrayList<>();
-        String[] lines = content.split(ConfigConstants.NEWLINE);
+        String[] lines = content.split(CommonConstants.NEWLINE);
 
         StringBuilder currentSection = new StringBuilder();
         String currentParentTitle = ConfigConstants.DEFAULT_PARENT_TITLE;
@@ -70,7 +71,7 @@ public class BulletParser {
             else {
                 // 번호가 없는 줄(불릿이 있든 없든)은 무조건 현재 섹션에 추가
                 if (sectionStartLine == -1) sectionStartLine = i;
-                if (currentSection.length() > 0) currentSection.append(ConfigConstants.NEWLINE);
+                if (currentSection.length() > 0) currentSection.append(CommonConstants.NEWLINE);
                 currentSection.append(line);
             }
         }
@@ -109,10 +110,10 @@ public class BulletParser {
         metadata.put(ConfigConstants.METADATA_KEY_START_LINE, startLine);
         
         // filename 메타데이터가 없는 경우를 대비하여 명시적으로 설정
-        if (!metadata.containsKey(ConfigConstants.METADATA_KEY_FILENAME)) {
-            Object filename = baseMetadata.get(ConfigConstants.METADATA_KEY_FILENAME);
+        if (!metadata.containsKey(CommonConstants.METADATA_KEY_FILENAME)) {
+            Object filename = baseMetadata.get(CommonConstants.METADATA_KEY_FILENAME);
             if (filename != null) {
-                metadata.put(ConfigConstants.METADATA_KEY_FILENAME, filename);
+                metadata.put(CommonConstants.METADATA_KEY_FILENAME, filename);
             }
         }
         

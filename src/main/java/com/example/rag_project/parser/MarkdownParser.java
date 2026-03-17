@@ -1,5 +1,6 @@
 package com.example.rag_project.parser;
 
+import com.example.rag_project.constants.CommonConstants;
 import com.example.rag_project.constants.ConfigConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -38,7 +39,7 @@ public class MarkdownParser {
      * @return Markdown 문서이면 true
      */
     public boolean isMarkdownDocument(String content) {
-        String[] lines = content.split(ConfigConstants.NEWLINE);
+        String[] lines = content.split(CommonConstants.NEWLINE);
         int markdownHeadingCount = 0;
         
         for (String line : lines) {
@@ -61,12 +62,12 @@ public class MarkdownParser {
      */
     public List<Document> parse(String content, Map<String, Object> baseMetadata) {
         List<Document> documents = new ArrayList<>();
-        String[] lines = content.split(ConfigConstants.NEWLINE);
+        String[] lines = content.split(CommonConstants.NEWLINE);
         
         StringBuilder currentSection = new StringBuilder();
-        String currentH1 = ConfigConstants.EMPTY_STRING;
-        String currentH2 = ConfigConstants.EMPTY_STRING;
-        String currentH3 = ConfigConstants.EMPTY_STRING;
+        String currentH1 = CommonConstants.EMPTY_STRING;
+        String currentH2 = CommonConstants.EMPTY_STRING;
+        String currentH3 = CommonConstants.EMPTY_STRING;
         
         for (String line : lines) {
             String trimmedLine = line.trim();
@@ -84,11 +85,11 @@ public class MarkdownParser {
                 // 2. 제목 업데이트
                 if (trimmedLine.startsWith(ConfigConstants.H1_PREFIX)) {
                     currentH1 = trimmedLine.substring(2);
-                    currentH2 = ConfigConstants.EMPTY_STRING; 
-                    currentH3 = ConfigConstants.EMPTY_STRING;
+                    currentH2 = CommonConstants.EMPTY_STRING; 
+                    currentH3 = CommonConstants.EMPTY_STRING;
                 } else if (trimmedLine.startsWith(ConfigConstants.H2_PREFIX)) {
                     currentH2 = trimmedLine.substring(3);
-                    currentH3 = ConfigConstants.EMPTY_STRING;
+                    currentH3 = CommonConstants.EMPTY_STRING;
                 } else if (trimmedLine.startsWith(ConfigConstants.H3_PREFIX)) {
                     currentH3 = trimmedLine.substring(4);
                 }
@@ -97,7 +98,7 @@ public class MarkdownParser {
                 currentSection.append(String.format(ConfigConstants.HIERARCHY_FORMAT, currentH1, currentH2, currentH3, line));
                 
             } else {
-                if (currentSection.length() > 0) currentSection.append(ConfigConstants.NEWLINE);
+                if (currentSection.length() > 0) currentSection.append(CommonConstants.NEWLINE);
                 currentSection.append(line);
             }
         }

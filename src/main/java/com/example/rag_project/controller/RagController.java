@@ -1,46 +1,48 @@
 package com.example.rag_project.controller;
 
-import com.example.rag_project.dto.RagRequest;
 import com.example.rag_project.dto.RagResponse;
-import com.example.rag_project.dto.SourceInfo;
-import com.example.rag_project.service.RagService;
+import com.example.rag_project.service.RagManagementService;
+import com.example.rag_project.constants.ConfigConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * RAG 시스템 관리 컨트롤러
+ * 
+ * <p>이 컨트롤러는 RAG 시스템의 관리 관련 API를 담당합니다:</p>
+ * <ul>
+ *   <li>시스템 상태 조회</li>
+ *   <li>문서 저장 및 초기화</li>
+ *   <li>벡터 저장소 관리</li>
+ * </ul>
+ * 
+ * <p><b>검색 기능:</b> 검색은 <code>/api/search/ask</code> 엔드포인트를 사용하세요.</p>
+ */
 @RestController
 @RequestMapping("/api/rag")
 @RequiredArgsConstructor
 public class RagController {
 
-    private final RagService ragService;
+    private final RagManagementService ragManagementService;
 
-    @PostMapping(value = "/ask", produces = "application/json; charset=UTF-8")
-    public ResponseEntity<RagResponse> query(@RequestBody RagRequest request) {
-        try {
-            // Redis 데이터만 사용하여 답변 생성
-            Map<String, Object> result = ragService.searchAndAnswerWithSources(request.getQuery());
-            String answer = (String) result.get("answer");
-            SourceInfo sources = (SourceInfo) result.get("sources");
-            
-            return ResponseEntity.ok(RagResponse.success(answer, null, sources));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("Redis 조회 실패: " + e.getMessage()));
-        }
-    }
-
+    /**
+     * RAG 시스템 상태 조회 엔드포인트
+     * 
+     * @return 시스템 상태 정보
+     */
     @GetMapping
     public ResponseEntity<RagResponse> getStatus() {
         try {
-            java.util.Map<String, Object> status = ragService.getStatusWithFiles();
-            status.put("redis_connection", "connected");
-            status.put("vector_store_type", "simple_with_redis_backup");
+            java.util.Map<String, Object> status = ragManagementService.getStatusWithFiles();
+            status.put(ConfigConstants.MAP_KEY_REDIS_CONNECTION, ConfigConstants.REDIS_CONNECTION_CONNECTED);
+            status.put(ConfigConstants.MAP_KEY_VECTOR_STORE_TYPE, ConfigConstants.VECTORSTORE_TYPE_SIMPLE_REDIS_BACKUP);
             
-            return ResponseEntity.ok(RagResponse.success("Redis 연결 상태 확인", status));
+            return ResponseEntity.ok(RagResponse.success(ConfigConstants.MSG_REDIS_CONNECTION_CHECK, status));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("Redis 상태 확인 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error(ConfigConstants.MSG_REDIS_STATUS_CHECK_FAILED + e.getMessage()));
         }
     }
 
@@ -48,26 +50,26 @@ public class RagController {
     public ResponseEntity<RagResponse> clearRedisVectorStore() {
         try {
             // Redis 벡터 저장소 초기화 (RedisVectorStore가 직접 처리)
-            Map<String, Object> result = ragService.clearStore();
+            Map<String, Object> result = ragManagementService.clearStore();
             
-            String message = String.format("Redis Vector Store 삭제 완료 - 총 %d개 파일 삭제 (RAG: %d개, Embedding: %d개)", 
-                result.get("totalDeleted"), result.get("ragKeysDeleted"), result.get("embeddingKeysDeleted"));
+            String message = String.format(ConfigConstants.MSG_REDIS_VECTORSTORE_DELETE_COMPLETE, 
+                result.get(ConfigConstants.MAP_KEY_TOTAL_DELETED), result.get(ConfigConstants.MAP_KEY_RAG_KEYS_DELETED), result.get(ConfigConstants.MAP_KEY_EMBEDDING_KEYS_DELETED));
             
             return ResponseEntity.ok(RagResponse.success(message, result));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("Redis Vector Store 삭제 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error(ConfigConstants.MSG_REDIS_VECTORSTORE_DELETE_FAILED + e.getMessage()));
         }
     }
 
     @PostMapping("/storage")
     public ResponseEntity<RagResponse> buildRedisVectorStore() {
         try {
-            java.util.Map<String, Object> result = ragService.saveDocumentsToRedis();
-            String message = result.get("message").toString();
+            java.util.Map<String, Object> result = ragManagementService.saveDocumentsToRedis();
+            String message = result.get(ConfigConstants.MAP_KEY_MESSAGE).toString();
             
             return ResponseEntity.ok(RagResponse.success(message, result));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("Redis Vector Store 구축 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error(ConfigConstants.MSG_REDIS_VECTORSTORE_BUILD_FAILED + e.getMessage()));
         }
     }
 
@@ -75,14 +77,14 @@ public class RagController {
     public ResponseEntity<RagResponse> reloadDocuments() {
         try {
             // 벡터 저장소 초기화 후 다시 로드
-            Map<String, Object> clearResult = ragService.clearStore();
-            ragService.initializeDocuments();
+            Map<String, Object> clearResult = ragManagementService.clearStore();
+            ragManagementService.initializeDocuments();
             
-            String message = String.format("문서가 다시 로드되었습니다. (%d개 파일 삭제 후 재로드)", clearResult.get("totalDeleted"));
+            String message = String.format(ConfigConstants.MSG_DOCUMENTS_RELOADED, clearResult.get(ConfigConstants.MAP_KEY_TOTAL_DELETED));
             
             return ResponseEntity.ok(RagResponse.success(message, clearResult));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(RagResponse.error("문서 재로드 실패: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(RagResponse.error(ConfigConstants.MSG_DOCUMENT_RELOAD_FAILED + e.getMessage()));
         }
     }
 
