@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -58,6 +59,7 @@ public class RagManagementService {
     private final FileManager fileManager;
     private final TextSplitterProcessor textSplitterProcessor;
     private final VectorStoreConfig vectorStoreConfig;
+    private final VectorStore vectorStore;
     private final ObjectMapper mapper = new ObjectMapper();
 
     private boolean isInitialized = false;
@@ -68,7 +70,12 @@ public class RagManagementService {
      * 현재 documents 폴더의 모든 문서를 Redis에 저장하는 메서드
      */
     public Map<String, Object> saveDocumentsToRedis() throws IOException {
-        return saveDocumentsFromFolderToRedisWithDuplicateCheck(CommonConstants.DOCUMENTS_FOLDER_NAME);
+        Map<String, Object> result = saveDocumentsFromFolderToRedisWithDuplicateCheck(CommonConstants.DOCUMENTS_FOLDER_NAME);
+        
+        // 문서 저장 후 초기화 상태 업데이트
+        initializeDocuments();
+        
+        return result;
     }
 
     /**
@@ -94,7 +101,7 @@ public class RagManagementService {
     public Map<String, Object> saveDocumentsFromFolderToRedisWithDuplicateCheck(String folderPath) throws IOException {
         Map<String, Object> folderStatus = fileManager.getFolderStatus(folderPath);
         
-        if (!(Boolean) folderStatus.get(CommonConstants.KEY_CONTENT)) {
+        if (!(Boolean) folderStatus.getOrDefault(CommonConstants.KEY_EXISTS, false)) {
             return Map.of(
             ConfigConstants.MAP_KEY_SAVED_COUNT, 0,
             ConfigConstants.MAP_KEY_DUPLICATE_COUNT, 0,
@@ -107,6 +114,15 @@ public class RagManagementService {
         
         if (!allDocuments.isEmpty()) {
             List<Document> splitDocuments = textSplitterProcessor.splitDocuments(allDocuments);
+            
+            // VectorStore에 벡터 데이터 저장
+            try {
+                vectorStore.add(splitDocuments);
+                log.info("벡터 저장소에 {}개 문서 저장됨", splitDocuments.size());
+            } catch (Exception e) {
+                log.error("벡터 저장소 저장 실패: {}", e.getMessage());
+            }
+            
             Map<String, Object> saveResult = redisDocumentRepository.saveDocuments(splitDocuments);
             
             int savedCount = (Integer) saveResult.get(ConfigConstants.MAP_KEY_SAVED_COUNT);
@@ -138,7 +154,15 @@ public class RagManagementService {
         try {
             isInitialized = false;
             
-            // 1. RedisTemplate을 통해 안전하게 키 삭제
+            // 1. VectorStore 데이터 정리 (Spring AI 추상화 계층 사용)
+            try {
+                // RedisVectorStore는 별도의 clear 메서드가 없으므로 키 패턴 삭제로 처리
+                log.debug("VectorStore 데이터 정리 시작");
+            } catch (Exception e) {
+                log.warn("VectorStore 정리 중 오류: {}", e.getMessage());
+            }
+            
+            // 2. RedisTemplate을 통해 안전하게 키 삭제
             Map<String, Object> redisResult = clearRedisKeys();
             int ragDeleted = (Integer) redisResult.get(ConfigConstants.MAP_KEY_RAG_KEYS);
             int embeddingDeleted = (Integer) redisResult.get(ConfigConstants.MAP_KEY_EMBEDDING_KEYS);
@@ -146,9 +170,6 @@ public class RagManagementService {
             
             result.put(ConfigConstants.MAP_KEY_RAG_KEYS, ragDeleted);
             result.put(ConfigConstants.MAP_KEY_EMBEDDING_KEYS, embeddingDeleted);
-            
-            // 2. VectorStore 데이터 정理
-            clearVectorStoreData();
             
             result.put(ConfigConstants.MAP_KEY_TOTAL_DELETED, totalDeleted);
             result.put(ConfigConstants.MAP_KEY_MESSAGE, MessageConstants.MSG_VECTORSTORE_DATA_CLEANED + ": 총 " + totalDeleted + "개 키 삭제됨");
@@ -179,9 +200,9 @@ public class RagManagementService {
                 // FileManager를 통해 파일 목록 가져오기
                 Map<String, Object> folderStatus = fileManager.getFolderStatus(vectorStoreConfig.getDocumentsFolder());
                 
-                if ((Boolean) folderStatus.get(CommonConstants.KEY_CONTENT)) {
+                if ((Boolean) folderStatus.getOrDefault(CommonConstants.KEY_EXISTS, false)) {
                     @SuppressWarnings("unchecked")
-                    List<String> files = (List<String>) folderStatus.get(CommonConstants.KEY_METADATA);
+                    List<String> files = (List<String>) folderStatus.get(CommonConstants.KEY_FILES);
                     
                     for (String fileName : files) {
                         String lowerFileName = fileName.toLowerCase();
@@ -293,21 +314,6 @@ public class RagManagementService {
         }
         
         return result;
-    }
-    
-    /**
-     * VectorStore를 통한 벡터 데이터 삭제 (Spring AI 추상화)
-     */
-    private void clearVectorStoreData() {
-        try {
-            // VectorStore의 모든 문서 ID 가져오기
-            // Spring AI RedisVectorStore는 내부적으로 메타데이터를 관리
-            // 현재로서는 Redis 키 삭제로 충분히 벡터 데이터 정리
-            log.debug("VectorStore 데이터 정리 완료");
-            
-        } catch (Exception e) {
-            log.warn(MessageConstants.MSG_VECTORSTORE_CLEAN_ERROR, e.getMessage());
-        }
     }
 
     /**
