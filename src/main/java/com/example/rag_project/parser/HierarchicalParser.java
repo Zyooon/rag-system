@@ -401,25 +401,25 @@ public class HierarchicalParser {
             } else if (isListItem(trimmedLine)) {
                 // 목록 항목이면 현재 섹션에 추가하고, 하위 섹션으로도 분리
                 if (currentSubsection.length() > 0) {
-                    currentSubsection.append(ConfigConstants.NEWLINE);
+                    currentSubsection.append(CommonConstants.NEWLINE);
                 }
                 currentSubsection.append(line);
                 
                 // 현재 섹션에도 추가
                 if (currentSection.length() > 0) {
-                    currentSection.append(ConfigConstants.NEWLINE);
+                    currentSection.append(CommonConstants.NEWLINE);
                 }
                 currentSection.append(line);
                 
             } else {
                 // 일반 내용 추가
                 if (currentSubsection.length() > 0) {
-                    currentSubsection.append(ConfigConstants.NEWLINE);
+                    currentSubsection.append(CommonConstants.NEWLINE);
                 }
                 currentSubsection.append(line);
                 
                 if (currentSection.length() > 0) {
-                    currentSection.append(ConfigConstants.NEWLINE);
+                    currentSection.append(CommonConstants.NEWLINE);
                 }
                 currentSection.append(line);
             }
