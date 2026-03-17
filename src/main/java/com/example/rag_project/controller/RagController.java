@@ -46,7 +46,7 @@ public class RagController {
         }
     }
 
-    @DeleteMapping("/storage")
+    @DeleteMapping("/documents")
     public ResponseEntity<RagResponse> clearRedisVectorStore() {
         try {
             // Redis 벡터 저장소 초기화 (RedisVectorStore가 직접 처리)
@@ -61,7 +61,7 @@ public class RagController {
         }
     }
 
-    @PostMapping("/storage")
+    @PostMapping("/documents")
     public ResponseEntity<RagResponse> buildRedisVectorStore() {
         try {
             java.util.Map<String, Object> result = ragManagementService.saveDocumentsToRedis();
@@ -73,7 +73,7 @@ public class RagController {
         }
     }
 
-    @PostMapping("/reload")
+    @PutMapping("/documents/reload")
     public ResponseEntity<RagResponse> reloadDocuments() {
         try {
             // 벡터 저장소 초기화 후 다시 로드

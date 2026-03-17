@@ -100,26 +100,29 @@ src/main/java/com/example/rag_project/
 
 ## 📚 API 사용법
 
-### 질문하기
+### 검색 기능
 ```bash
-POST /api/rag/ask
+# 질문/답변 (POST 방식)
+POST /api/search
 Content-Type: application/json
 
 {
   "query": "네모난 사과의 특징은 무엇인가요?"
 }
-```
 
 ### 문서 관리 API
 ```bash
-# 문서 로드
-POST /api/rag/load-from-files
+# 문서 저장
+POST /api/rag/documents
 
 # 시스템 상태 확인
 GET /api/rag/status
 
 # 벡터 저장소 초기화
-DELETE /api/rag/clear-store
+DELETE /api/rag/documents
+
+# 문서 재로드
+PUT /api/rag/documents/reload
 ```
 
 ### 응답 예시

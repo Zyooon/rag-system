@@ -34,7 +34,7 @@ public class SearchController {
      * @param request 질문 요청 객체
      * @return 답변과 출처 정보 포함한 응답
      */
-    @PostMapping(value = "/ask", produces = "application/json; charset=UTF-8")
+    @PostMapping(produces = "application/json; charset=UTF-8")
     public ResponseEntity<RagResponse> query(@RequestBody RagRequest request) {
         try {
             // SearchService를 직접 사용하여 답변 생성
