@@ -82,10 +82,10 @@ public final class CommonConstants {
     // ==================== 정규식 패턴 ====================
     
     /** Hierarchical 패턴 정규식 */
-    public static final String PATTERN_HIERARCHICAL = "^(#{1,3}\\\\s+|\\\\d+\\\\.\\\\s+|\\\\[.*\\\\]|제목:)";
+    public static final String PATTERN_HIERARCHICAL = "^(#{1,3}\\s+|\\d+\\.\\s+|\\[.*\\]|제목:)";
     
     /** Bullet 패턴 정규식 */
-    public static final String PATTERN_BULLET = "^(\\\\d+\\\\.\\\\s+|[-*]\\\\s+|•\\\\s+)";
+    public static final String PATTERN_BULLET = "^(\\d+\\.\\s+|[-*]\\s+|•\\s+)";
     
     // ==================== Map 키 상수 ====================
     

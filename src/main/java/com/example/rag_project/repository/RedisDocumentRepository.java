@@ -99,7 +99,11 @@ public class RedisDocumentRepository {
         
         for (int i = 0; i < documents.size(); i++) {
             Document doc = documents.get(i);
-            String key = DOCUMENT_KEY_PREFIX + i;
+            
+            // 문서 내용과 메타데이터를 기반으로 고유한 키 생성
+            String contentHash = Integer.toHexString(doc.getText().hashCode());
+            String filename = (String) doc.getMetadata().getOrDefault(CommonConstants.METADATA_KEY_FILENAME, "unknown");
+            String key = DOCUMENT_KEY_PREFIX + filename + "_" + contentHash + "_" + i;
             
             // 중복 체크
             if (redisTemplate.hasKey(key)) {
