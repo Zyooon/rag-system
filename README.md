@@ -68,6 +68,9 @@ src/main/java/com/example/rag_project/
 ## 구현도
 - 문서 파싱 및 분할
 <img width="661" height="481" alt="Image" src="https://github.com/user-attachments/assets/1b24ea10-5a25-413b-9fca-657181a4f707" />
+
+<br>
+
 - 검색 및 답변 생성
 <img width="661" height="511" alt="Image" src="https://github.com/user-attachments/assets/5b7fac2b-7db3-4d1c-8b5a-bd6710540ba6" />
 
