@@ -65,6 +65,12 @@ src/main/java/com/example/rag_project/
 └── RagProjectApplication.java
 ```
 
+## 구현도
+- 문서 파싱 및 분할
+<img width="661" height="481" alt="Image" src="https://github.com/user-attachments/assets/1b24ea10-5a25-413b-9fca-657181a4f707" />
+- 검색 및 답변 생성
+<img width="661" height="511" alt="Image" src="https://github.com/user-attachments/assets/5b7fac2b-7db3-4d1c-8b5a-bd6710540ba6" />
+
 ## 🚀 시작하기
 
 ### 사전 요구사항
@@ -270,3 +276,4 @@ rag.search.max-results=5
 - ✅ 정확한 출처 추적 시스템
 - ✅ 중복 문서 방지
 - ✅ 다양한 문서 형식 지원
+
