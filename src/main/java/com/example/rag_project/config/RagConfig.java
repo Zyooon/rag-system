@@ -19,6 +19,35 @@ import org.springframework.data.redis.serializer.RedisSerializer;
 import com.example.rag_project.constants.ConfigConstants;
 import redis.clients.jedis.JedisPooled;
 
+/**
+ * RAG 시스템 설정 클래스
+ * 
+ * <p>이 클래스는 RAG 시스템의 모든 핵심 설정을 관리합니다:</p>
+ * <ul>
+ *   <li><b>Ollama 연결</b> - 로컬 LLM 서버 연결 설정</li>
+ *   <li><b>임베딩 모델</b> - 벡터화를 위한 임베딩 모델 설정</li>
+ *   <li><b>챗봇 모델</b> - 답변 생성을 위한 챗봇 모델 설정</li>
+ *   <li><b>벡터 저장소</b> - Redis 기반 벡터 저장소 설정</li>
+ *   <li><b>Redis 연결</b> - Redis 서버 연결 및 직렬화 설정</li>
+ * </ul>
+ * 
+ * <p><b>주요 설정:</b></p>
+ * <ul>
+ *   <li><b>기본 URL</b>: http://localhost:11434 (Ollama)</li>
+ *   <li><b>임베딩 모델</b>: bge-m3</li>
+ *   <li><b>챗봇 모델</b>: llama3</li>
+ *   <li><b>Redis 포트</b>: 6379</li>
+ * </ul>
+ * 
+ * <p><b>Bean 설정:</b></p>
+ * <ul>
+ *   <li><b>OllamaApi</b> - Ollama API 연결 객체</li>
+ *   <li><b>EmbeddingModel</b> - 텍스트 임베딩 모델</li>
+ *   <li><b>ChatModel</b> - 챗봇 대화 모델</li>
+ *   <li><b>VectorStore</b> - 벡터 저장소 객체</li>
+ *   <li><b>RedisTemplate</b> - Redis 데이터 접근 템플릿</li>
+ * </ul>
+ */
 @Configuration
 public class RagConfig {
 

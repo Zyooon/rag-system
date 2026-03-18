@@ -120,11 +120,7 @@ public class BulletParser implements DocumentParser {
         return new Document(content.trim(), metadata);
     }
     
-    /**
-     * "4. 말하는 운동화" 같은 형식을 인식하는 로직
-     */
     private boolean isParentItem(String line) {
-        // 오직 "숫자. " 또는 "숫자) "로 시작하는 경우만 새로운 아이템(부모)으로 인정
         return line.matches("^\\d+[\\.\\)]\\s+.+");
     }
 

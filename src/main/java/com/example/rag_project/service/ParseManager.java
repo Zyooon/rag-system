@@ -18,10 +18,10 @@ import java.util.Optional;
  * 
  * <p>이 클래스는 RAG 시스템의 <b>문서 파싱 전략</b>을 담당합니다:</p>
  * <ul>
- *   <li>🔍 <b>파서 선택</b> - 문서 유형에 맞는 최적 파서 자동 선택</li>
- *   <li>🏗️ <b>구조 분석</b> - 다양한 파싱 전략을 통한 문서 구조 분석</li>
- *   <li>🎯 <b>최적화</b> - 파싱 결과 품질 평가 및 최적 파서 선택</li>
- *   <li>🔄 <b>전략 패턴</b> - 여러 파서를 시도하여 최상의 결과 도출</li>
+ *   <li><b>파서 선택</b> - 문서 유형에 맞는 최적 파서 자동 선택</li>
+ *   <li><b>구조 분석</b> - 다양한 파싱 전략을 통한 문서 구조 분석</li>
+ *   <li><b>최적화</b> - 파싱 결과 품질 평가 및 최적 파서 선택</li>
+ *   <li><b>전략 패턴</b> - 여러 파서를 시도하여 최상의 결과 도출</li>
  * </ul>
  * 
  * <p><b>핵심 책임:</b></p>
@@ -34,10 +34,10 @@ import java.util.Optional;
  * 
  * <p><b>파싱 전략:</b></p>
  * <ol>
- *   <li>📋 <b>HierarchicalParser</b>: 제목/소제목 구조가 명확한 문서</li>
- *   <li>� <b>MarkdownParser</b>: Markdown 형식 문서</li>
- *   <li>� <b>BulletParser</b>: 번호 목록 형식의 문서</li>
- *   <li>� <b>SimpleLineParser</b>: 일반 텍스트 문서</li>
+ *   <li><b>HierarchicalParser</b>: 제목/소제목 구조가 명확한 문서</li>
+ *   <li><b>MarkdownParser</b>: Markdown 형식 문서</li>
+ *   <li><b>BulletParser</b>: 번호 목록 형식의 문서</li>
+ *   <li><b>SimpleLineParser</b>: 일반 텍스트 문서</li>
  * </ol>
  * 
  * <p><b>의존성:</b> DocumentParser 구현체들 (Hierarchical, Markdown, Bullet, SimpleLine)</p>
