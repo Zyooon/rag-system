@@ -21,10 +21,10 @@ import java.util.*;
  * 
  * <p>이 클래스는 RAG 시스템의 모든 핵심 기능을 통합 관리합니다:</p>
  * <ul>
- *   <li>📁 <b>문서 처리</b> - 파일 읽기, 파싱, 분할, 저장 전체 파이프라인</li>
- *   <li>🗄️ <b>벡터 저장소 관리</b> - 초기화, 정리, 상태 모니터링</li>
- *   <li>📊 <b>시스템 상태</b> - 전체 시스템 상태 정보 제공</li>
- *   <li>🔄 <b>생명주기 관리</b> - 시스템 초기화부터 운영까지</li>
+ *   <li><b>문서 처리</b> - 파일 읽기, 파싱, 분할, 저장 전체 파이프라인</li>
+ *   <li><b>벡터 저장소 관리</b> - 초기화, 정리, 상태 모니터링</li>
+ *   <li><b>시스템 상태</b> - 전체 시스템 상태 정보 제공</li>
+ *   <li><b>생명주기 관리</b> - 시스템 초기화부터 운영까지</li>
  * </ul>
  * 
  * <p><b>통합된 책임:</b></p>
@@ -39,11 +39,11 @@ import java.util.*;
  * 
  * <p><b>처리 파이프라인:</b></p>
  * <ol>
- *   <li>📖 FileManager 파일 읽기</li>
- *   <li>🔍 ParseManager 파싱</li>
- *   <li>✂️ TextSplitterProcessor 분할</li>
- *   <li>💾 RedisDocumentRepository 저장</li>
- *   <li>📊 상태 업데이트</li>
+ *   <li>FileManager 파일 읽기</li>
+ *   <li>ParseManager 파싱</li>
+ *   <li>TextSplitterProcessor 분할</li>
+ *   <li>RedisDocumentRepository 저장</li>
+ *   <li>상태 업데이트</li>
  * </ol>
  * 
  * <p><b>의존성:</b> ParseManager, RedisDocumentRepository, FileManager, TextSplitterProcessor, VectorStoreConfig</p>

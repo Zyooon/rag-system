@@ -5,10 +5,12 @@ import com.example.rag_project.dto.RagResponse;
 import com.example.rag_project.dto.SourceInfo;
 import com.example.rag_project.constants.ConfigConstants;
 import com.example.rag_project.service.SearchService;
+import com.example.rag_project.repository.RedisSearchRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,6 +29,7 @@ import java.util.Map;
 public class SearchController {
 
     private final SearchService searchService;
+    private final RedisSearchRepository redisSearchRepository;
 
     /**
      * 사용자 질문에 대해 RAG를 통해 답변을 생성하는 엔드포인트
@@ -45,6 +48,21 @@ public class SearchController {
             return ResponseEntity.ok(RagResponse.success(answer, null, sources));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(RagResponse.error("검색 실패: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Redis에 저장된 모든 문서를 조회하는 디버깅 엔드포인트
+     * 
+     * @return Redis 문서 목록
+     */
+    @GetMapping("/debug/documents")
+    public ResponseEntity<List<Map<String, Object>>> getAllDocuments() {
+        try {
+            List<Map<String, Object>> documents = redisSearchRepository.getAllDocuments();
+            return ResponseEntity.ok(documents);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(List.of());
         }
     }
 }

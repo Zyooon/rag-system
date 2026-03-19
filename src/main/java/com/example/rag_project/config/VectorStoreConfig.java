@@ -10,10 +10,10 @@ import org.springframework.context.annotation.Configuration;
  * 
  * <p>이 클래스는 벡터 저장소 관련 모든 설정값을 관리합니다:</p>
  * <ul>
- *   <li>📁 <b>문서 폴더</b> - 문서가 저장된 폴더 경로</li>
- *   <li>🔑 <b>Redis 키</b> - Redis 키 접두사 설정</li>
- *   <li>🏷️ <b>인덱스</b> - 벡터 인덱스 이름 설정</li>
- *   <li>⚙️ <b>임베딩</b> - 임베딩 관련 설정</li>
+ *   <li><b>문서 폴더</b> - 문서가 저장된 폴더 경로</li>
+ *   <li><b>Redis 키</b> - Redis 키 접두사 설정</li>
+ *   <li><b>인덱스</b> - 벡터 인덱스 이름 설정</li>
+ *   <li><b>임베딩</b> - 임베딩 관련 설정</li>
  * </ul>
  * 
  * <p><b>설정 카테고리:</b></p>

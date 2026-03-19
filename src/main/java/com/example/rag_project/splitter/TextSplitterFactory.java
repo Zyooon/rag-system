@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component;
  * 
  * <p>이 클래스는 TextSplitter 인스턴스 생성만 담당합니다:</p>
  * <ul>
- *   <li>🏭 <b>인스턴스 생성</b> - 다양한 설정으로 TokenTextSplitter 생성</li>
- *   <li>⚙️ <b>설정 적용</b> - TextSplitterConfig의 설정값 적용</li>
- *   <li>🔧 <b>전략 제공</b> - 다양한 분할 전략용 Splitter 제공</li>
+ *   <li><b>인스턴스 생성</b> - 다양한 설정으로 TokenTextSplitter 생성</li>
+ *   <li><b>설정 적용</b> - TextSplitterConfig의 설정값 적용</li>
+ *   <li><b>전략 제공</b> - 다양한 분할 전략용 Splitter 제공</li>
  * </ul>
  * 
  * <p><b>제공되는 Splitter:</b></p>

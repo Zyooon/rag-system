@@ -7,10 +7,10 @@ import java.util.List;
  * 
  * <p>이 클래스는 텍스트 분할기의 모든 설정 상수를 관리합니다:</p>
  * <ul>
- *   <li>📏 <b>분할 크기</b> - 청크의 최대/최소 크기 설정</li>
- *   <li>🔤 <b>임베딩 기준</b> - 벡터화를 위한 최소 길이 기준</li>
- *   <li>📊 <b>수량 제한</b> - 생성할 청크의 최대 수량</li>
- *   <li>✨ <b>구분자</b> - 문장 분리를 위한 구분자 문자들</li>
+ *   <li><b>분할 크기</b> - 청크의 최대/최소 크기 설정</li>
+ *   <li><b>임베딩 기준</b> - 벡터화를 위한 최소 길이 기준</li>
+ *   <li><b>수량 제한</b> - 생성할 청크의 최대 수량</li>
+ *   <li><b>구분자</b> - 문장 분리를 위한 구분자 문자들</li>
  * </ul>
  * 
  * <p><b>설정 카테고리:</b></p>
@@ -40,7 +40,7 @@ public class TextSplitterConfig {
     public static final boolean DEFAULT_KEEP_SEPARATOR = true;
     
     /** 기본 구분자 문자들 */
-    public static final List<Character> DEFAULT_PUNCTUATION_MARKS = List.of('.', '\n', ']', '-');
+    public static final List<Character> DEFAULT_PUNCTUATION_MARKS = List.of('.', '\n', ']', '-', '|');
     
     // ==================== 정밀 검색 설정 ====================
     

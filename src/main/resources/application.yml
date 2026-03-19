@@ -34,7 +34,7 @@ rag:
   documents:
     folder: ${RAG_DOCUMENTS_FOLDER:documents}
   search:
-    threshold: 0.3
+    threshold: 0.5
     max-results: 5
   vectorstore:
     type: redis

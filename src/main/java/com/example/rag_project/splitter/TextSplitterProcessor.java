@@ -6,6 +6,7 @@ import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,10 +15,10 @@ import java.util.Map;
  * 
  * <p>이 클래스는 텍스트 분할의 비즈니스 로직을 담당합니다:</p>
  * <ul>
- *   <li>✂️ <b>문서 분할</b> - 다양한 전략으로 문서 분할</li>
- *   <li>📏 <b>길이 기반 분할</b> - 문서 길이에 따른 자동 분할</li>
- *   <li>🎯 <b>전략 선택</b> - 용도에 맞는 분할 전략 선택</li>
- *   <li>📊 <b>메타데이터 관리</b> - 분할 후 메타데이터 처리</li>
+ *   <li><b>문서 분할</b> - 다양한 전략으로 문서 분할</li>
+ *   <li><b>길이 기반 분할</b> - 문서 길이에 따른 자동 분할</li>
+ *   <li><b>전략 선택</b> - 용도에 맞는 분할 전략 선택</li>
+ *   <li><b>메타데이터 관리</b> - 분할 후 메타데이터 처리</li>
  * </ul>
  * 
  * <p><b>분할 전략:</b></p>
@@ -118,10 +119,25 @@ public class TextSplitterProcessor {
      */
     private List<Document> splitWithSettings(List<Document> documents, TextSplitterConfig.SplitterSettings settings) {
         try {
-            TokenTextSplitter splitter = createSplitter(settings);
-            List<Document> result = splitter.apply(documents);
+            List<Document> result = new ArrayList<>();
             
-            log.debug("문서 분할 완료: {}개 -> {}개 청크 (설정: {})", 
+            for (Document doc : documents) {
+                // 테이블 문서 감지 및 개별 분할
+                if (isTableDocument(doc)) {
+                    List<Document> tableChunks = splitTableDocument(doc);
+                    result.addAll(tableChunks);
+                    log.debug("테이블 문서 분할: {}개 행 -> {}개 청크", 
+                            countTableRows(doc), tableChunks.size());
+                } else {
+                    // 일반 문서는 기본 분할기 사용
+                    TokenTextSplitter splitter = createSplitter(settings);
+                    List<Document> normalChunks = splitter.apply(List.of(doc));
+                    result.addAll(normalChunks);
+                    log.debug("일반 문서 분할: 1개 -> {}개 청크", normalChunks.size());
+                }
+            }
+            
+            log.debug("전체 문서 분할 완료: {}개 -> {}개 청크 (설정: {})", 
                     documents.size(), result.size(), settings);
             
             return result;
@@ -146,6 +162,95 @@ public class TextSplitterProcessor {
             settings.isKeepSeparator(),
             settings.getPunctuationMarks()
         );
+    }
+    
+    /**
+     * 테이블 문서인지 감지
+     * 
+     * @param document 감지할 문서
+     * @return 테이블 문서이면 true
+     */
+    private boolean isTableDocument(Document document) {
+        String filename = document.getMetadata().getOrDefault("filename", "").toString();
+        
+        // 오직 파일명이 "table"을 포함하는 경우에만 테이블로 처리
+        return filename.contains("table") || filename.contains("TABLE");
+    }
+    
+    /**
+     * 테이블 문서를 개별 행으로 분할
+     * 
+     * @param document 테이블 문서
+     * @return 분할된 행 문서 리스트
+     */
+    private List<Document> splitTableDocument(Document document) {
+        List<Document> result = new ArrayList<>();
+        String content = document.getText();
+        Map<String, Object> originalMetadata = document.getMetadata();
+        
+        String[] lines = content.split("\n");
+        String currentChunk = "";
+        int chunkIndex = 0;
+        
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            
+            // 빈 줄은 건너뛰기
+            if (line.isEmpty()) {
+                continue;
+            }
+            
+            // 헤더 줄은 별도 청크로 처리
+            if (line.startsWith("|") && (line.contains("---") || line.contains(":---"))) {
+                if (!currentChunk.isEmpty()) {
+                    result.add(createTableChunk(currentChunk, originalMetadata, chunkIndex++));
+                    currentChunk = "";
+                }
+                result.add(createTableChunk(line, originalMetadata, chunkIndex++));
+                continue;
+            }
+            
+            // 테이블 데이터 행
+            if (line.startsWith("|")) {
+                if (!currentChunk.isEmpty()) {
+                    result.add(createTableChunk(currentChunk, originalMetadata, chunkIndex++));
+                }
+                currentChunk = line;
+            } else {
+                // 테이블이 아닌 내용은 현재 청크에 추가
+                if (!currentChunk.isEmpty()) {
+                    currentChunk += "\n" + line;
+                }
+            }
+        }
+        
+        // 마지막 청크 추가
+        if (!currentChunk.isEmpty()) {
+            result.add(createTableChunk(currentChunk, originalMetadata, chunkIndex));
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 테이블 청크 생성
+     */
+    private Document createTableChunk(String content, Map<String, Object> originalMetadata, int chunkIndex) {
+        Map<String, Object> newMetadata = new HashMap<>(originalMetadata);
+        newMetadata.put("chunk_index", chunkIndex);
+        newMetadata.put("section_type", "table_row");
+        
+        return new Document(content, newMetadata);
+    }
+    
+    /**
+     * 테이블 행 수 계산
+     */
+    private int countTableRows(Document document) {
+        String content = document.getText();
+        return (int) content.lines()
+                .filter(line -> line.trim().startsWith("|") && !line.contains("---"))
+                .count();
     }
     
     /**

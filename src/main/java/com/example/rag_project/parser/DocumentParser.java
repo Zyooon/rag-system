@@ -22,12 +22,6 @@ import java.util.Map;
  *   <li>{@link BulletParser} - 목록/불릿 형식 문서 파싱</li>
  *   <li>{@link SimpleLineParser} - 일반 텍스트 문서 파싱</li>
  * </ul>
- * 
- * <p><b>사용 예시:</b></p>
- * <pre>{@code
- * DocumentParser parser = new HierarchicalParser();
- * List<Document> documents = parser.parse(content, metadata);
- * }</pre>
  */
 public interface DocumentParser {
     

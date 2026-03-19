@@ -216,139 +216,37 @@ public class SearchService {
     }
 
     /**
-     * 문서 내용으로 Redis에서 출처 정보를 찾는 메서드
+     * RedisSearchRepository를 활용하여 하드코딩 없이 실제 파일명을 찾는 핵심 메서드
      * 
-     * @param documentText 검색된 문서 내용
+     * @param chunkContent 검색된 청크 내용
      * @return 출처 정보 (SourceInfo 객체)
      */
-    private SourceInfo findSourceInfoFromRedis(String documentText) {
+    private SourceInfo findSourceInfoFromRedis(String chunkContent) {
+        SourceInfo info = new SourceInfo();
+        info.setFilename(ConfigConstants.UNKNOWN_FILENAME);
+
         try {
-            // Redis에서 모든 문서 조회
-            List<Map<String, Object>> redisDocs = redisSearchRepository.getAllDocuments();
-            return findSourceInfoFromDocuments(documentText, redisDocs);
-        } catch (Exception e) {
-            log.warn("Failed to find source info from Redis, using fallback: {}", e.getMessage());
-            return createFallbackSourceInfo(documentText);
-        }
-    }
-
-    /**
-     * Redis 문서들 중에서 일치하는 출처 정보를 찾는 내부 메서드
-     * 
-     * @param content 검색된 문서 내용
-     * @param redisDocs Redis에 저장된 문서 목록
-     * @return 출처 정보
-     */
-    private SourceInfo findSourceInfoFromDocuments(String content, List<Map<String, Object>> redisDocs) {
-        String normalizedContent = content.trim().toLowerCase();
-        double bestMatchScore = 0.0;
-        SourceInfo bestMatch = null;
-        
-        for (Map<String, Object> redisDoc : redisDocs) {
-            String redisContent = (String) redisDoc.get(CommonConstants.KEY_CONTENT);
-            if (redisContent == null) continue;
+            // 주입받은 RedisSearchRepository를 사용하여 전체 문서 메타데이터 로드
+            List<Map<String, Object>> allDocs = redisSearchRepository.getAllDocuments();
             
-            String normalizedRedisContent = redisContent.trim().toLowerCase();
-            
-            // 유사도 계산 (간단한 문자열 유사도)
-            double similarity = calculateContentSimilarity(normalizedContent, normalizedRedisContent);
-            
-            if (similarity > bestMatchScore && similarity > 0.3) { // 30% 이상 유사해야 매칭
-                bestMatchScore = similarity;
-                bestMatch = extractSourceInfoFromDocument(redisDoc, content);
-                log.debug("Better match found: similarity={}, filename={}", similarity, bestMatch.getFilename());
-            }
-        }
-        
-        if (bestMatch != null) {
-            log.debug("Best match found: filename={}, similarity={}", bestMatch.getFilename(), bestMatchScore);
-            return bestMatch;
-        }
-        
-        // 찾지 못했으면 기본 SourceInfo 반환
-        return createFallbackSourceInfo(content);
-    }
-
-    /**
-     * 문서 맵에서 출처 정보를 추출하는 메서드
-     * 
-     * @param doc Redis 문서 맵
-     * @param originalContent 원본 문서 내용
-     * @return 출처 정보
-     */
-    private SourceInfo extractSourceInfoFromDocument(Map<String, Object> doc, String originalContent) {
-        Object metadataObj = doc.get(CommonConstants.KEY_METADATA);
-        
-        SourceInfo sourceInfo = new SourceInfo();
-        
-        if (metadataObj instanceof Map) {
-            Map<?, ?> metaMap = (Map<?, ?>) metadataObj;
-            String filename = metaMap.get(CommonConstants.METADATA_KEY_FILENAME) != null ? metaMap.get(CommonConstants.METADATA_KEY_FILENAME).toString() : ConfigConstants.UNKNOWN_FILENAME;
-            sourceInfo.setFilename(filename);
-        } else {
-            sourceInfo.setFilename(ConfigConstants.UNKNOWN_FILENAME);
-        }
-        
-        sourceInfo.setContent(originalContent);
-        
-        // chunkId 설정
-        if (metadataObj instanceof Map) {
-            Map<?, ?> metaMap = (Map<?, ?>) metadataObj;
-            String chunkId = metaMap.get("chunkId") != null ? metaMap.get("chunkId").toString() : "";
-            sourceInfo.setChunkId(chunkId.isEmpty() ? null : chunkId);
-        }
-        
-        return sourceInfo;
-    }
-
-    /**
-     * Fallback 출처 정보를 생성하는 메서드
-     * 
-     * @param documentText 문서 내용
-     * @return 기본 출처 정보
-     */
-    private SourceInfo createFallbackSourceInfo(String documentText) {
-        // 내용의 일부를 파일명으로 사용 (최대 50자)
-        String fallbackName = documentText.length() > 50 ? 
-            documentText.substring(0, 50) + "..." : documentText;
-        
-        SourceInfo sourceInfo = new SourceInfo();
-        sourceInfo.setFilename(fallbackName);
-        sourceInfo.setContent(documentText);
-        
-        log.debug("No matching document found in Redis, using fallback: {}", fallbackName);
-        return sourceInfo;
-    }
-
-    /**
-     * 두 문자열 간의 유사도 계산 (간단한 Jaccard 유사도 기반)
-     * 
-     * @param content1 첫 번째 문자열
-     * @param content2 두 번째 문자열
-     * @return 유사도 (0.0 ~ 1.0)
-     */
-    private double calculateContentSimilarity(String content1, String content2) {
-        // 짧은 내용에 대해서는 정확한 일치 확인
-        if (content1.length() < 100 && content2.length() < 100) {
-            return content1.equals(content2) ? 1.0 : 0.0;
-        }
-        
-        // 더 긴 내용에 대해서는 부분 문자열 매칭
-        String shorter = content1.length() < content2.length() ? content1 : content2;
-        String longer = content1.length() < content2.length() ? content2 : content1;
-        
-        // 20자 이상의 공통 부분 문자열 찾기
-        int maxCommonLength = 0;
-        for (int i = 0; i <= shorter.length() - 20; i++) {
-            for (int j = 20; j <= Math.min(50, shorter.length() - i); j++) {
-                String substring = shorter.substring(i, i + j);
-                if (longer.contains(substring)) {
-                    maxCommonLength = Math.max(maxCommonLength, j);
+            for (Map<String, Object> docMap : allDocs) {
+                String originalContent = (String) docMap.get(CommonConstants.KEY_CONTENT);
+                
+                // 검색된 청크 내용이 Redis 원본 본문에 포함되어 있는지 확인
+                if (originalContent != null && originalContent.contains(chunkContent.trim())) {
+                    Map<String, Object> metadata = (Map<String, Object>) docMap.get(CommonConstants.KEY_METADATA);
+                    if (metadata != null) {
+                        String actualName = (String) metadata.get(CommonConstants.METADATA_KEY_FILENAME);
+                        info.setFilename(actualName != null ? actualName : ConfigConstants.UNKNOWN_FILENAME);
+                        info.setContent(chunkContent);
+                        return info;
+                    }
                 }
             }
+        } catch (Exception e) {
+            log.error("Redis 원본 매칭 중 오류 발생: {}", e.getMessage());
         }
-        
-        // 유사도 계산 (공통 부분의 길이 / 전체 길이)
-        return (double) maxCommonLength / Math.max(content1.length(), content2.length());
+        return info;
     }
+
 }
