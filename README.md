@@ -1,68 +1,33 @@
 # RAG 시스템 프로젝트
 
-Spring Boot와 Spring AI를 기반으로 한 Retrieval-Augmented Generation (RAG) 시스템입니다. 로컬 LLM(Ollama)과 벡터 저장소(Redis)를 활용하여 문서 기반 질의응답 기능을 제공합니다.
+Spring Boot와 Spring AI를 기반으로, 문서 파싱·청킹·벡터 검색을 통해 문서 기반 질의응답을 수행하는 RAG 시스템입니다.
 
 ## 🚀 주요 기능
 
-- **문서 자동 처리**: 다양한 형식의 문서를 자동으로 파싱하고 벡터화
-- **의미론적 검색**: 사용자 질문과 관련된 문서를 벡터 유사도로 검색
-- **정확한 출처 추적**: 참조 번호 기반의 정확한 출처 정보 제공
-- **다중 레벨 파싱**: 계층적 문서 구조 분석 (제목, 소제목, 목록 등)
-- **중복 문서 방지**: 고유 키 생성으로 중복 저장 방지
-- **벡터-메타데이터 동기화**: VectorStore와 Redis의 이중 저장 구조
+- 문서 파싱 및 벡터화
+- 의미 기반 유사도 검색
+- 참조 번호 기반 출처 추적
+- 계층적 문서 구조 파싱
+- Redis 기반 벡터 + 메타데이터 저장
 
 ## 🛠️ 기술 스택
 
-- **Java 17**: 최신 자바 버전
-- **Spring Boot 4.0.3**: 웹 애플리케이션 프레임워크
-- **Spring AI 2.0.0-M2**: AI 통합 프레임워크
-- **Ollama**: 로컬 LLM (llama3, bge-m3 임베딩)
-- **Redis Stack Server**: 벡터 저장소 및 메타데이터 저장
-- **Lombok**: 코드 생성 라이브러리
-- **Gradle**: 빌드 도구
+- **Java 17**
+- **Spring Boot**
+- **Spring AI**
+- **Ollama** (llama3, bge-m3)
+- **Redis Stack**
+- **Gradle**
 
 ## 📁 프로젝트 구조
 
 ```
-src/main/java/com/example/rag_project/
-├── controller/          # REST API 컨트롤러
-│   ├── RagController.java      # 메인 RAG API
-│   └── SearchController.java   # 검색 전용 API
-├── service/            # 비즈니스 로직
-│   ├── RagManagementService.java  # RAG 시스템 통합 관리
-│   ├── SearchService.java        # 검색 및 답변 생성
-│   ├── ParseManager.java         # 파서 관리자
-│   └── FileManager.java          # 파일 관리
-├── repository/         # 데이터 접근 계층
-│   ├── RedisDocumentRepository.java  # 문서 저장소
-│   └── RedisSearchRepository.java     # 검색 전용 저장소
-├── parser/             # 문서 파서
-│   ├── HierarchicalParser.java  # 계층적 구조 파싱
-│   ├── BulletParser.java        # 목록 항목 파싱
-│   ├── MarkdownParser.java      # 마크다운 파싱
-│   └── SimpleLineParser.java    # 단순 라인 파싱
-├── splitter/           # 텍스트 분할기
-│   ├── TextSplitterProcessor.java  # 텍스트 분할 처리
-│   ├── TextSplitterFactory.java    # 분할기 팩토리
-│   └── TextSplitterConfig.java     # 분할 설정
-├── dto/                # 데이터 전송 객체
-│   ├── RagRequest.java
-│   ├── RagResponse.java
-│   └── SourceInfo.java
-├── config/             # 설정 클래스
-│   ├── RagConfig.java           # 메인 설정
-│   ├── VectorStoreConfig.java   # 벡터 저장소 설정
-│   └── RagAutoLoadConfig.java   # 자동 로드 설정
-├── constants/          # 상수 정의
-│   ├── CommonConstants.java     # 공통 상수
-│   ├── ConfigConstants.java     # 설정 상수
-│   └── MessageConstants.java    # 메시지 상수
-├── exception/          # 예외 처리
-│   ├── GlobalExceptionHandler.java
-│   └── RagServiceException.java
-├── prompt/             # 프롬프트 템플릿
-│   └── PromptTemplate.java
-└── RagProjectApplication.java
+- controller: API 엔드포인트
+- service: RAG 처리 로직 (검색 / 생성)
+- parser: 문서 구조 분석
+- splitter: 텍스트 분할
+- repository: Redis 데이터 관리
+- config: 설정 클래스
 ```
 
 ## 구현도
@@ -156,36 +121,28 @@ PUT /api/rag/documents/reload
 - **표 형식**: 테이블 구조 지원
 - **혼합 형식**: 여러 형식의 조합 지원
 
-## 🔧 핵심 기능 설명
+## 🔧 핵심 설계
 
-### 1. 이중 저장 아키텍처
-- **VectorStore**: 벡터 임베딩 데이터 저장 (의미론적 검색용)
-- **RedisDocumentRepository**: 메타데이터와 원본 텍스트 저장 (출처 추적용)
-- **동기화**: 두 저장소 간 데이터 일관성 유지
+### 1. 이중 저장 구조
+- VectorStore: 벡터 임베딩 저장 (검색용)
+- Redis: 원본 + 메타데이터 저장 (출처 추적)
+- 두 저장소 간 데이터 동기화
 
-### 2. 고급 문서 파싱
-- **ParseManager**: 최적의 파서 자동 선택
-- **HierarchicalParser**: 계층적 구조 분석 (H1, H2, H3)
-- **BulletParser**: 목록 항목 및 구조화된 텍스트 처리
-- **MarkdownParser**: 마크다운 형식 지원
-- **SimpleLineParser**: 단순 텍스트 처리
+### 2. 문서 파싱
+- 문서 구조(제목, 목록 등)를 기반으로 파싱
+- 문서 형식에 따라 파서 자동 선택
 
-### 3. 지능형 텍스트 분할
-- **TextSplitterProcessor**: 의미 단위 텍스트 분할
-- **TextSplitterFactory**: 문서 특성에 맞는 분할기 선택
-- **최적 청킹**: 검색 효율성 극대화
+### 3. 텍스트 분할 (Chunking)
+- 의미 단위로 텍스트 분할
+- 문서 특성에 맞는 분할 전략 적용
 
-### 4. 정확한 출처 추적
-- **참조 번호 기반 매칭**: LLM 답변의 `[1]`, `[2]` 참조를 실제 문서와 정확히 매핑
-- **Redis 원본 비교**: 벡터 저장소 메타데이터 유실 시 Redis 원본과 내용 비교로 복원
-- **다중 필터링**: 유사도 임계값, 중복 제거, 파일명 필터링
-- **고유 키 생성**: 중복 문서 방지 및 정확한 식별
+### 4. 출처 추적
+- 참조 번호 기반으로 답변과 출처 매핑
+- Redis 원본 데이터 기반 검증
 
-### 5. 벡터 검색 최적화
-- **의미론적 검색**: bge-m3 임베딩 모델 사용
-- **유사도 필터링**: 설정 가능한 임계값 기반
-- **효율적 저장**: Redis 벡터 저장소 활용
-- **스코어링**: 정확한 유사도 계산 및 정렬
+### 5. 벡터 검색
+- 임베딩 기반 유사도 검색
+- 임계값 필터링 및 결과 정렬
 
 ## ⚙️ 설정
 
@@ -227,53 +184,35 @@ rag.search.max-results=5
 7. **답변 생성**: 검색된 문서를 바탕으로 LLM이 답변 생성
 8. **출처 매핑**: 참조 번호 기반으로 정확한 출처 정보 제공
 
-## 🧪 테스트
-
-샘플 문서가 `documents/` 폴더에 포함되어 있습니다:
-
-- `sample-odd.txt`: 번호 목록 형식의 이상한 것들 사전
-- `sample-markdown.txt`: 마크다운 형식 문서
-- `sample-table.txt`: 표 형식 문서
-- `sample-mixed.txt`: 혼합 형식 문서
-- 기타 다양한 형식의 테스트 문서들
-
 ## 🐛 문제 해결
 
-### 출처 정보가 '알 수 없음'으로 나올 경우
-1. Redis 서버가 실행 중인지 확인
-2. 문서가 제대로 로드되었는지 확인 (`/api/rag/status`)
-3. VectorStore와 Redis 데이터 동기화 상태 확인
-4. 로그를 통해 메타데이터 상태 확인
+### 출처가 안 나올 때
+- Redis 실행 여부 확인
+- 문서 로드 상태 확인 (/api/rag/status)
 
-### 검색 결과가 없을 경우
-1. 유사도 임계값 확인 (`rag.search.threshold`)
-2. 문서가 벡터 저장소에 저장되었는지 확인
-3. Ollama 모델이 제대로 로드되었는지 확인
-4. 문서 형식이 파서에서 지원되는지 확인
-
-### 벡터 데이터가 저장되지 않을 경우
-1. VectorStore 빈 주입 확인
-2. Redis Stack Server 벡터 기능 활성화 확인
-3. 임베딩 모델 (bge-m3) 동작 확인
-
-## 📈 성능 최적화
-
-### 문서 처리 최적화
-- **중복 제거**: 고유 키 생성으로 불필요한 재처리 방지
-- **분할 최적화**: 의미 단위 분할로 검색 정확도 향상
-- **파서 자동 선택**: 문서 특성에 맞는 최적 파서 사용
-
-### 검색 최적화
-- **유사도 임계값**: 정확도와 속도의 균형 조절
-- **최대 결과 수**: 응답 속도 최적화
-- **캐싱**: 자주 검색되는 질문에 대한 캐시
+### 검색 결과가 없을 때
+- 유사도 임계값 확인
+- 임베딩 모델 정상 동작 확인
 
 ## 🔮 개선 사항
 
 ### 현재 구현된 기능
-- ✅ 이중 저장 아키텍처 (VectorStore + Redis)
-- ✅ 고급 문서 파싱 및 분할
-- ✅ 정확한 출처 추적 시스템
-- ✅ 중복 문서 방지
-- ✅ 다양한 문서 형식 지원
+- ✅ 출처 불일치 문제 해결 (Top-K 한계 극복)
+- ✅ Chunk 기반 문맥 유실 문제 해결
+- ✅ 검색 정확도 및 응답 안정성 개선
+- ✅ Redis 의존 구조 → 추상화 기반 구조로 개선
+- ✅ 벡터 DB 교체 가능 구조 확보
+
+---
+
+## 📝 개발 일지
+
+### 블로그 포스팅
+<!-- TODO: 개발 블로그 링크 추가 예정 -->
+- [Spring AI 와 RAG](https://velog.io/@wcw7373/03130603)
+- [청킹(Chunking)과 벡터 데이터 최적화](https://velog.io/@wcw7373/03150351)
+- [Redis 에서 Vector DB 사용기](https://velog.io/@wcw7373/03161143)
+- [Redis 직접 제어의 문제](https://velog.io/@wcw7373/03161226)
+- [HierarchicalParser 사용법](https://velog.io/@wcw7373/03160155)
+- [RAG 검색의 출처 표기 문제](https://velog.io/@wcw7373/03171240)
 
